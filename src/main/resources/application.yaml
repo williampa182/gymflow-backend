@@ -30,3 +30,6 @@ app:
     secret: "***REMOVED***"
     expiration: 86400000
 
+logging:
+  level:
+    "[org.springframework.security]": TRACE

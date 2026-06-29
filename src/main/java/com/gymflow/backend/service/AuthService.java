@@ -21,6 +21,7 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
 
+    @SuppressWarnings("null")
     public AuthResponse registrar(RegisterRequest request) {
         if (usuarioRepository.existsByEmail(request.getEmail())) {
             throw new RuntimeException("Ya existe un usuario con ese email");
@@ -33,9 +34,8 @@ public class AuthService {
                 .rol(request.getRol())
                 .build();
 
-        usuario = usuarioRepository.save(usuario);
+        usuarioRepository.save(usuario);
         String token = jwtUtil.generarToken(usuario);
-
         return buildResponse(token, usuario);
     }
 

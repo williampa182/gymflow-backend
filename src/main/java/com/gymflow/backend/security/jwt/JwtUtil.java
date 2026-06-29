@@ -6,7 +6,7 @@ import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
-
+import java.util.Objects;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
@@ -51,13 +51,13 @@ public class JwtUtil {
         return extraerExpiracion(token).before(new Date());
     }
 
-    public String extraerUsername(String token) {
-        return extraerClaim(token, Claims::getSubject);
-    }
+   public String extraerUsername(String token) {
+    return extraerClaim(token, claims -> Objects.requireNonNull(claims.getSubject()));
+}
 
-    private Date extraerExpiracion(String token) {
-        return extraerClaim(token, Claims::getExpiration);
-    }
+private Date extraerExpiracion(String token) {
+    return extraerClaim(token, claims -> Objects.requireNonNull(claims.getExpiration()));
+}
 
     public <T> T extraerClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extraerTodosClaims(token);
@@ -65,10 +65,12 @@ public class JwtUtil {
     }
 
     private Claims extraerTodosClaims(String token) {
-        return Jwts.parser()
-                .verifyWith(getSigningKey())
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-    }
+    return Objects.requireNonNull(
+        Jwts.parser()
+            .verifyWith(getSigningKey())
+            .build()
+            .parseSignedClaims(token)
+            .getPayload()
+    );
+}
 }
