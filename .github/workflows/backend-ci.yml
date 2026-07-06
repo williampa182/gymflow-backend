@@ -38,6 +38,11 @@ jobs:
           java-version: "21"
           cache: maven
 
+      - name: Dar permisos de ejecución a mvnw
+        # El bit +x se pierde al hacer commit desde Windows; el runner es
+        # Linux y necesita el permiso explícito para ejecutar el script.
+        run: chmod +x ./mvnw
+
       - name: Compilar y correr tests unitarios
         # Los 16 tests son Mockito puro (sin contexto Spring), no requieren
         # Docker/PostgreSQL/Redis. GymflowBackendApplicationTests está
