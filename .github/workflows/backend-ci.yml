@@ -1,0 +1,45 @@
+name: Backend CI
+
+# Seguridad: solo se dispara en push/PR a main, nunca en pull_request_target
+# (evita ejecutar código de forks no confiables con permisos elevados).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Principio de mínimo privilegio: el GITHUB_TOKEN solo puede leer el repo.
+# No se necesita escritura porque este workflow no hace commits ni publica nada.
+permissions:
+  contents: read
+
+# Cancela ejecuciones anteriores del mismo PR/branch si llega un push nuevo,
+# para no gastar minutos de CI en runs obsoletos.
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Compilar y correr tests
+    runs-on: ubuntu-latest
+
+    steps:
+      # Actions oficiales de la organización "actions" (mantenidas por GitHub,
+      # badge de Verified creator). Pineadas a versión mayor; Dependabot
+      # (ver .github/dependabot.yml) avisa/actualiza automáticamente.
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Java 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Compilar y correr tests unitarios
+        # Los 16 tests son Mockito puro (sin contexto Spring), no requieren
+        # Docker/PostgreSQL/Redis. GymflowBackendApplicationTests está
+        # @Disabled por depender de Docker, así que no se ejecuta aquí.
+        run: ./mvnw -B test

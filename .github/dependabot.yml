@@ -1,0 +1,16 @@
+# Mantiene actualizadas las GitHub Actions usadas en los workflows.
+# Por qué: pinear a @v4 (versión mayor) en vez de un SHA exacto es seguro
+# solo si hay un mecanismo que detecte cuándo sale una versión nueva y la
+# proponga como Pull Request revisable — eso es exactamente lo que hace esto.
+# Nunca se auto-mergea: cada actualización llega como PR para revisar antes.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"

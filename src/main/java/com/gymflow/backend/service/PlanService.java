@@ -5,6 +5,8 @@ import com.gymflow.backend.dto.PlanResponseDTO;
 import com.gymflow.backend.model.Plan;
 import com.gymflow.backend.repository.PlanRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -16,6 +18,7 @@ public class PlanService {
     private final PlanRepository planRepository;
 
     @SuppressWarnings("null")
+    @CacheEvict(value = "planes", allEntries = true)
     public PlanResponseDTO crear(PlanRequestDTO request) {
         if (planRepository.existsByNombre(request.getNombre())) {
             throw new RuntimeException("Ya existe un plan con ese nombre");
@@ -36,6 +39,7 @@ public class PlanService {
         return toDTO(plan);
     }
 
+    @Cacheable(value = "planes", key = "#activo != null ? #activo : 'todos'")
     public List<PlanResponseDTO> listar(Boolean activo) {
         List<Plan> planes = (activo != null)
                 ? planRepository.findByActivo(activo)
@@ -54,6 +58,7 @@ public class PlanService {
     }
 
     @SuppressWarnings("null")
+    @CacheEvict(value = "planes", allEntries = true)
     public PlanResponseDTO actualizar(Long id, PlanRequestDTO request) {
         Plan plan = planRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Plan no encontrado con id: " + id));
@@ -72,6 +77,7 @@ public class PlanService {
     }
 
     @SuppressWarnings("null")
+    @CacheEvict(value = "planes", allEntries = true)
     public PlanResponseDTO cambiarEstado(Long id, boolean activo) {
         Plan plan = planRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Plan no encontrado con id: " + id));
