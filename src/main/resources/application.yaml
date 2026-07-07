@@ -10,8 +10,12 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      # En local (default) Hibernate ajusta el esquema automáticamente, cómodo
+      # para desarrollo. En producción (Railway) se debe fijar DDL_AUTO=validate
+      # para que Hibernate NUNCA modifique el esquema solo, y usar migraciones
+      # controladas (Flyway/Liquibase) para cualquier cambio real.
+      ddl-auto: ${DDL_AUTO:update}
+    show-sql: ${SHOW_SQL:true}
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -41,4 +45,6 @@ app:
 
 logging:
   level:
-    "[org.springframework.security]": TRACE
+    # En local, TRACE ayuda a depurar el filtro JWT/auth. En producción fijar
+    # SECURITY_LOG_LEVEL=WARN para no filtrar detalles de autenticación en logs.
+    "[org.springframework.security]": ${SECURITY_LOG_LEVEL:TRACE}
