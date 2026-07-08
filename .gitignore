@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Backups locales (contienen datos reales, nunca al repo) ###
+/backups/

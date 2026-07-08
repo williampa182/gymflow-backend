@@ -32,6 +32,34 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        # health e info son públicos (usados por Railway/health checks y el
+        # dashboard); prometheus y el resto quedan detrás de ADMIN via
+        # SecurityConfig. metrics es útil en dev, se puede restringir después.
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: ${HEALTH_SHOW_DETAILS:when-authorized}
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+info:
+  app:
+    name: GymFlow Backend
+    description: API de gestión de gimnasios - planes, suscripciones y usuarios
+  java:
+    version: ${java.version:21}
+
 app:
   jwt:
     # Valor por defecto SOLO para desarrollo local. En producción (Railway,
@@ -48,3 +76,7 @@ logging:
     # En local, TRACE ayuda a depurar el filtro JWT/auth. En producción fijar
     # SECURITY_LOG_LEVEL=WARN para no filtrar detalles de autenticación en logs.
     "[org.springframework.security]": ${SECURITY_LOG_LEVEL:TRACE}
+  pattern:
+    # Usado solo por el appender de consola en modo texto plano (perfil dev).
+    # El perfil prod usa JSON estructurado vía logback-spring.xml.
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{correlationId}] %logger{36} - %msg%n"

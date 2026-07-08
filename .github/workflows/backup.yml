@@ -1,0 +1,75 @@
+name: Backup de PostgreSQL (producción)
+
+# Corre todos los días a las 07:00 UTC (~02:00 hora Colombia) y también se
+# puede disparar manualmente desde la pestaña Actions ("Run workflow") para
+# probarlo sin esperar al cron.
+#
+# ⚠️ REQUISITO antes de que esto funcione: crear el secret de repo
+# PROD_DATABASE_URL con la connection string PÚBLICA de Postgres en Railway
+# (Settings → Variables → DATABASE_PUBLIC_URL en el servicio de Postgres).
+# Sin ese secret configurado, este workflow falla en el paso de pg_dump —
+# eso es intencional (falla ruidosa en vez de "backup vacío" silencioso).
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: Dump + verificación + artifact
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Instalar cliente de PostgreSQL 16 (pg_dump)
+        # Debe coincidir con la versión mayor del Postgres de producción
+        # (16, ver docker-compose.yml) para evitar problemas de compatibilidad
+        # de formato de dump entre versiones distintas.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-16
+
+      - name: Generar dump comprimido
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::Falta el secret PROD_DATABASE_URL. Configuralo en Settings > Secrets > Actions antes de que este workflow pueda correr."
+            exit 1
+          fi
+          TIMESTAMP=$(date -u +"%Y%m%d_%H%M%S")
+          echo "BACKUP_FILE=gymflow_prod_${TIMESTAMP}.sql.gz" >> "$GITHUB_ENV"
+          pg_dump "$DATABASE_URL" --clean --if-exists --no-owner | gzip -9 > "gymflow_prod_${TIMESTAMP}.sql.gz"
+
+      - name: Verificar integridad del dump
+        # No es una restauración completa (eso sería más costoso en minutos
+        # de CI), pero valida que el .gz no esté corrupto y que el contenido
+        # tenga forma de dump de Postgres real, no un archivo vacío o un
+        # mensaje de error de pg_dump guardado como si fuera el backup.
+        run: |
+          set -euo pipefail
+          gzip -t "$BACKUP_FILE"
+          zcat "$BACKUP_FILE" | head -n 20 | grep -q "PostgreSQL database dump" || {
+            echo "::error::El backup no parece un dump válido de PostgreSQL."
+            exit 1
+          }
+          SIZE=$(stat -c%s "$BACKUP_FILE")
+          echo "Backup verificado: $BACKUP_FILE ($SIZE bytes)"
+          if [ "$SIZE" -lt 200 ]; then
+            echo "::error::El backup es sospechosamente pequeño (<200 bytes) — probablemente la BD está vacía o el dump falló silenciosamente."
+            exit 1
+          fi
+
+      - name: Subir backup como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BACKUP_FILE }}
+          path: ${{ env.BACKUP_FILE }}
+          # Retención de 35 días: cubre "un mes + margen" con el límite
+          # gratuito de GitHub Actions. Para retención más larga hace falta
+          # mover a un storage externo (S3/GCS), pero eso ya sale del scope
+          # gratuito para un proyecto de portafolio.
+          retention-days: 35

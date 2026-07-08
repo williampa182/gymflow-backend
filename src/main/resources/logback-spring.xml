@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!--
+        Perfil "prod" (o cualquiera != default/dev): logs en JSON estructurado,
+        listos para Railway / Grafana Loki / cualquier agregador que parsee JSON.
+        Incluye correlationId (X-Request-ID) vía MDC, puesto por CorrelationIdFilter.
+    -->
+    <springProfile name="prod,railway">
+        <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <includeMdcKeyName>correlationId</includeMdcKeyName>
+                <customFields>{"application":"gymflow-backend"}</customFields>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="JSON_CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!--
+        Perfil "dev" (o default / sin perfil): texto plano legible en consola,
+        con el correlationId visible entre corchetes para poder trazar un
+        request específico durante desarrollo local.
+    -->
+    <springProfile name="dev,default">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%X{correlationId}] %cyan(%logger{36}) - %msg%n</pattern>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+</configuration>
