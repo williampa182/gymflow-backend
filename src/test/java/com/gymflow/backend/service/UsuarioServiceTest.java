@@ -10,6 +10,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
@@ -42,22 +46,24 @@ class UsuarioServiceTest {
 
     @Test
     void listar_sinFiltro_retornaTodos() {
-        when(usuarioRepository.findAll()).thenReturn(List.of(usuario));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(usuarioRepository.findAll(pageable)).thenReturn(new PageImpl<>(List.of(usuario)));
 
-        List<UsuarioResponseDTO> resultado = usuarioService.listarUsuarios(null);
+        Page<UsuarioResponseDTO> resultado = usuarioService.listarUsuarios(null, pageable);
 
-        assertThat(resultado).hasSize(1);
-        assertThat(resultado.get(0).getNombre()).isEqualTo("William Admin");
+        assertThat(resultado.getContent()).hasSize(1);
+        assertThat(resultado.getContent().get(0).getNombre()).isEqualTo("William Admin");
     }
 
     @Test
     void listar_filtradoPorRol_retornaFiltrados() {
-        when(usuarioRepository.findByRol(Rol.ADMIN)).thenReturn(List.of(usuario));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(usuarioRepository.findByRol(Rol.ADMIN, pageable)).thenReturn(new PageImpl<>(List.of(usuario)));
 
-        List<UsuarioResponseDTO> resultado = usuarioService.listarUsuarios(Rol.ADMIN);
+        Page<UsuarioResponseDTO> resultado = usuarioService.listarUsuarios(Rol.ADMIN, pageable);
 
-        assertThat(resultado).hasSize(1);
-        assertThat(resultado.get(0).getRol()).isEqualTo(Rol.ADMIN);
+        assertThat(resultado.getContent()).hasSize(1);
+        assertThat(resultado.getContent().get(0).getRol()).isEqualTo(Rol.ADMIN);
     }
 
     @Test

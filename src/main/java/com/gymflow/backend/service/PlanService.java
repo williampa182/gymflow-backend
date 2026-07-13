@@ -5,11 +5,9 @@ import com.gymflow.backend.dto.PlanResponseDTO;
 import com.gymflow.backend.model.Plan;
 import com.gymflow.backend.repository.PlanRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -18,7 +16,6 @@ public class PlanService {
     private final PlanRepository planRepository;
 
     @SuppressWarnings("null")
-    @CacheEvict(value = "planes", allEntries = true)
     public PlanResponseDTO crear(PlanRequestDTO request) {
         if (planRepository.existsByNombre(request.getNombre())) {
             throw new RuntimeException("Ya existe un plan con ese nombre");
@@ -39,15 +36,16 @@ public class PlanService {
         return toDTO(plan);
     }
 
-    @Cacheable(value = "planes", key = "#activo != null ? #activo : 'todos'")
-    public List<PlanResponseDTO> listar(Boolean activo) {
-        List<Plan> planes = (activo != null)
-                ? planRepository.findByActivo(activo)
-                : planRepository.findAll();
+    // Se saca @Cacheable de este método (propuesta de Codex, hallazgo 3.3):
+    // cachear resultados paginados con distintos filtros/orden/tamaño de
+    // página tendría cardinalidad alta y poco valor real de cache. Si se
+    // quiere volver a cachear, hace falta una política específica para eso.
+    public Page<PlanResponseDTO> listar(Boolean activo, Pageable pageable) {
+        Page<Plan> planes = (activo != null)
+                ? planRepository.findByActivo(activo, pageable)
+                : planRepository.findAll(pageable);
 
-        return planes.stream()
-                .map(this::toDTO)
-                .toList();
+        return planes.map(this::toDTO);
     }
 
     @SuppressWarnings("null")
@@ -58,7 +56,6 @@ public class PlanService {
     }
 
     @SuppressWarnings("null")
-    @CacheEvict(value = "planes", allEntries = true)
     public PlanResponseDTO actualizar(Long id, PlanRequestDTO request) {
         Plan plan = planRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Plan no encontrado con id: " + id));
@@ -77,7 +74,6 @@ public class PlanService {
     }
 
     @SuppressWarnings("null")
-    @CacheEvict(value = "planes", allEntries = true)
     public PlanResponseDTO cambiarEstado(Long id, boolean activo) {
         Plan plan = planRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Plan no encontrado con id: " + id));

@@ -1,5 +1,9 @@
 
 
+# DEV ONLY: estas credenciales son públicas dentro del repo y existen solo
+# para levantar el entorno local. Nunca reutilizarlas en staging/producción.
+# En Railway/producción usar secrets administrados por la plataforma.
+
 services:
   postgres:
     image: postgres:16
@@ -16,8 +20,14 @@ services:
   redis:
     image: redis:7-alpine
     container_name: gymflow_redis
+    # Hallazgo 1.1 del THREAT_MODEL.md, confirmado con evidencia de runtime
+    # por Codex Security: antes Redis aceptaba PING/SET/GET sin AUTH y el
+    # puerto quedaba publicado en 0.0.0.0 (todas las interfaces), no solo
+    # loopback. requirepass cierra el acceso anónimo; bind a 127.0.0.1 evita
+    # publicar Redis fuera de la propia máquina de dev.
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-gymflow_redis_dev_only_change_me}"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - gymflow_redis_data:/data
 

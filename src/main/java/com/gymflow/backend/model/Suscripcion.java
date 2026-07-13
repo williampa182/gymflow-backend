@@ -41,6 +41,22 @@ public class Suscripcion {
     @Column(name = "creado_en")
     private LocalDateTime creadoEn;
 
+    // Optimistic locking: protege contra el caso "dos requests modifican la
+    // MISMA suscripción a la vez" (ej. dos admins cancelando/editando el
+    // mismo registro en simultáneo). Hibernate incrementa esta columna en
+    // cada UPDATE y falla con OptimisticLockingFailureException si otra
+    // transacción ya la modificó entre el read y el write — GlobalExceptionHandler
+    // ya traduce eso a un 409 claro.
+    //
+    // OJO — esto NO cubre el otro caso de la carrera (dos requests creando
+    // DOS suscripciones activas DISTINTAS para el mismo usuario al mismo
+    // tiempo). Ese caso es un problema de integridad de negocio, no de
+    // update concurrente sobre una fila existente, y requiere una
+    // constraint a nivel de base de datos (ver
+    // scripts/migrations/001_unique_suscripcion_activa.sql).
+    @Version
+    private Long version;
+
     @PrePersist
     protected void onCreate() {
         creadoEn = LocalDateTime.now();

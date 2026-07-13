@@ -11,6 +11,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -79,22 +83,24 @@ class PlanServiceTest {
 
     @Test
     void listar_sinFiltro_retornaTodos() {
-        when(planRepository.findAll()).thenReturn(List.of(plan));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(planRepository.findAll(pageable)).thenReturn(new PageImpl<>(List.of(plan)));
 
-        List<PlanResponseDTO> resultado = planService.listar(null);
+        Page<PlanResponseDTO> resultado = planService.listar(null, pageable);
 
-        assertThat(resultado).hasSize(1);
-        assertThat(resultado.get(0).getNombre()).isEqualTo("Plan Mensual");
+        assertThat(resultado.getContent()).hasSize(1);
+        assertThat(resultado.getContent().get(0).getNombre()).isEqualTo("Plan Mensual");
     }
 
     @Test
     void listar_filtroActivo_retornaActivos() {
-        when(planRepository.findByActivo(true)).thenReturn(List.of(plan));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(planRepository.findByActivo(true, pageable)).thenReturn(new PageImpl<>(List.of(plan)));
 
-        List<PlanResponseDTO> resultado = planService.listar(true);
+        Page<PlanResponseDTO> resultado = planService.listar(true, pageable);
 
-        assertThat(resultado).hasSize(1);
-        assertThat(resultado.get(0).isActivo()).isTrue();
+        assertThat(resultado.getContent()).hasSize(1);
+        assertThat(resultado.getContent().get(0).isActivo()).isTrue();
     }
 
     @Test

@@ -17,6 +17,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -137,11 +141,13 @@ class SuscripcionServiceTest {
     @Test
     @SuppressWarnings("null")
     void listarPorUsuario_retornaLista() {
-        when(suscripcionRepository.findByUsuarioId(1L)).thenReturn(List.of(suscripcion));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(suscripcionRepository.findByUsuarioId(1L, pageable))
+                .thenReturn(new PageImpl<>(List.of(suscripcion)));
 
-        List<SuscripcionResponseDTO> resultado = suscripcionService.listarPorUsuario(1L);
+        Page<SuscripcionResponseDTO> resultado = suscripcionService.listarPorUsuario(1L, pageable);
 
-        assertThat(resultado).hasSize(1);
-        assertThat(resultado.get(0).getNombreUsuario()).isEqualTo("William Admin");
+        assertThat(resultado.getContent()).hasSize(1);
+        assertThat(resultado.getContent().get(0).getNombreUsuario()).isEqualTo("William Admin");
     }
 }

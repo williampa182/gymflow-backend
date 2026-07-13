@@ -12,6 +12,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * Asigna un ID de correlación único a cada request entrante (o reutiliza el
@@ -39,16 +40,23 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
     public static final String CORRELATION_ID_HEADER = "X-Request-ID";
     public static final String MDC_KEY = "correlationId";
 
+    // Hallazgo 4.2 del THREAT_MODEL.md: antes se aceptaba el header del
+    // cliente tal cual, sin sanitizar — riesgo de log injection (saltos de
+    // línea, caracteres de control, o simplemente longitud excesiva
+    // ensuciando los logs JSON). Whitelist conservadora: alfanumérico +
+    // ".", "_", "-" (cubre UUIDs y la mayoría de esquemas de ID de proxies),
+    // máximo 64 caracteres. Cualquier valor fuera de esto se descarta y se
+    // genera un UUID nuevo server-side, sin romper la compatibilidad con
+    // proxies/frontend que ya manden un ID válido.
+    private static final Pattern SAFE_CORRELATION_ID = Pattern.compile("^[A-Za-z0-9._-]{1,64}$");
+
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
 
-        String correlationId = request.getHeader(CORRELATION_ID_HEADER);
-        if (correlationId == null || correlationId.isBlank()) {
-            correlationId = UUID.randomUUID().toString();
-        }
+        String correlationId = obtenerCorrelationIdSeguro(request);
 
         try {
             MDC.put(MDC_KEY, correlationId);
@@ -60,5 +68,13 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
             // request procesado por ese mismo hilo heredaría el ID viejo.
             MDC.remove(MDC_KEY);
         }
+    }
+
+    private String obtenerCorrelationIdSeguro(HttpServletRequest request) {
+        String correlationId = request.getHeader(CORRELATION_ID_HEADER);
+        if (correlationId == null || !SAFE_CORRELATION_ID.matcher(correlationId).matches()) {
+            return UUID.randomUUID().toString();
+        }
+        return correlationId;
     }
 }

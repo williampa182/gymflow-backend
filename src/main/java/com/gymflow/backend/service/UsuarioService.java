@@ -5,9 +5,9 @@ import com.gymflow.backend.model.Usuario;
 import com.gymflow.backend.model.enums.Rol;
 import com.gymflow.backend.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -15,14 +15,12 @@ public class UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
 
-    public List<UsuarioResponseDTO> listarUsuarios(Rol rol) {
-        List<Usuario> usuarios = (rol != null)
-                ? usuarioRepository.findByRol(rol)
-                : usuarioRepository.findAll();
+    public Page<UsuarioResponseDTO> listarUsuarios(Rol rol, Pageable pageable) {
+        Page<Usuario> usuarios = (rol != null)
+                ? usuarioRepository.findByRol(rol, pageable)
+                : usuarioRepository.findAll(pageable);
 
-        return usuarios.stream()
-                .map(this::toDTO)
-                .toList();
+        return usuarios.map(this::toDTO);
     }
 
     @SuppressWarnings("null")

@@ -4,6 +4,7 @@ import com.gymflow.backend.dto.request.LoginRequest;
 import com.gymflow.backend.dto.request.RegisterRequest;
 import com.gymflow.backend.dto.response.AuthResponse;
 import com.gymflow.backend.model.Usuario;
+import com.gymflow.backend.model.enums.Rol;
 import com.gymflow.backend.repository.UsuarioRepository;
 import com.gymflow.backend.security.jwt.JwtUtil;
 import lombok.RequiredArgsConstructor;
@@ -27,11 +28,13 @@ public class AuthService {
             throw new RuntimeException("Ya existe un usuario con ese email");
         }
 
+        // Rol SIEMPRE forzado a CLIENTE en el registro público: nunca tomar
+        // el rol del input del cliente acá (ver comentario en RegisterRequest).
         Usuario usuario = Usuario.builder()
                 .nombre(request.getNombre())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
-                .rol(request.getRol())
+                .rol(Rol.CLIENTE)
                 .build();
 
         usuarioRepository.save(usuario);

@@ -27,6 +27,14 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
+    // Cost factor de BCrypt fijado explícitamente (hallazgo 4.1 del
+    // THREAT_MODEL.md). Antes se usaba el default implícito de la librería,
+    // que no era una decisión visible del proyecto. 12 es el mínimo
+    // recomendado hoy. Subir esto solo afecta passwords nuevos/verificaciones
+    // futuras — los hashes existentes con menor costo siguen validando
+    // porque el costo va embebido en el propio hash BCrypt.
+    private static final int BCRYPT_STRENGTH = 12;
+
     private final JwtAuthFilter jwtAuthFilter;
     private final LoginRateLimitFilter loginRateLimitFilter;
 
@@ -76,6 +84,6 @@ public class SecurityConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        return new BCryptPasswordEncoder(BCRYPT_STRENGTH);
     }
 }

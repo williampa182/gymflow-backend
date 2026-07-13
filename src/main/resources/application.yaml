@@ -25,12 +25,44 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # Hallazgo 1.1 del THREAT_MODEL.md. Debe coincidir con REDIS_PASSWORD
+      # usado en docker-compose.yml para el contenedor de Redis.
+      password: ${REDIS_PASSWORD:gymflow_redis_dev_only_change_me}
 
-  cache:
-    type: redis
+  # spring.cache.type: redis removido (hallazgo 1.2 del THREAT_MODEL.md,
+  # hardening preventivo). No hay ningún @Cacheable activo en el proyecto
+  # desde que se sacó de PlanService al agregar paginación (3.3) — mantener
+  # el cache manager configurado sin uso era superficie muerta que alguien
+  # podría reactivar sin revisar el modelo de seguridad del serializer.
+  # Redis se sigue usando igual para LoginRateLimitFilter (StringRedisTemplate).
 
 server:
   port: ${SERVER_PORT:8080}
+  # Hallazgo 3.4 del THREAT_MODEL.md: antes no había ningún límite explícito
+  # de tamaño de headers/body. Esto fija defaults razonables, configurables
+  # por env var. OJO: max-http-form-post-size/max-swallow-size cubren
+  # form-posts y el manejo de Tomcat ante cortes, pero NO limitan de forma
+  # estricta un body JSON grande antes de que Spring/Jackson lo empiece a
+  # leer — si se necesita un límite duro para application/json específicamente,
+  # hace falta un filtro dedicado que corte por Content-Length/bytes reales.
+  max-http-request-header-size: ${MAX_HTTP_REQUEST_HEADER_SIZE:8KB}
+  tomcat:
+    max-http-form-post-size: ${MAX_HTTP_FORM_POST_SIZE:2MB}
+    max-swallow-size: ${MAX_SWALLOW_SIZE:2MB}
+  # Hallazgo 3.6 del THREAT_MODEL.md: sin esto, un stack trace completo o la
+  # Whitelabel Error Page podían quedar expuestos si el perfil prod no
+  # estaba bien seteado — esto lo hace explícito independientemente del
+  # perfil activo, en vez de depender solo de defaults de Spring Boot.
+  # server-header vacío evita que Tomcat identifique versión/stack en el
+  # header Server (aunque Railway puede agregar sus propios headers fuera
+  # del control de la app, eso no lo cubre esto).
+  server-header: ""
+  error:
+    whitelabel:
+      enabled: false
+    include-stacktrace: ${ERROR_INCLUDE_STACKTRACE:never}
+    include-message: ${ERROR_INCLUDE_MESSAGE:never}
+    include-binding-errors: ${ERROR_INCLUDE_BINDING_ERRORS:never}
 
 management:
   endpoints:

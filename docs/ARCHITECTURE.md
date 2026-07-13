@@ -1,8 +1,9 @@
 # GymFlow — Arquitectura técnica completa
 
-> Documento vivo. Última actualización: 2026-07-07. Pensado para que cualquier
-> sesión futura (con Claude, otra IA, u otro desarrollador) tenga el contexto
-> técnico completo de una sola lectura, sin depender de memoria de conversación.
+> Documento vivo. Última actualización: 2026-07-13 (auditoría de seguridad +
+> dashboard ADMIN, ver §6.1 y §9). Pensado para que cualquier sesión futura
+> (con Claude, otra IA, u otro desarrollador) tenga el contexto técnico
+> completo de una sola lectura, sin depender de memoria de conversación.
 
 ## 1. Visión general
 
@@ -38,17 +39,19 @@ GitHub Actions y despliegue planeado en Railway.
 ### 2.2 Estructura de paquetes (`com.gymflow.backend`)
 
 ```
-config/           SecurityConfig, RedisCacheConfig, SwaggerConfig
-controller/       AuthController, PlanController, SuscripcionController, UsuarioController
-dto/              request/, response/, PlanRequestDTO, PlanResponseDTO, etc.
+config/           SecurityConfig, SwaggerConfig
+controller/       AuthController, PlanController, SuscripcionController, UsuarioController, DashboardAdminController
+dto/              request/, response/, dashboard/, PlanRequestDTO, PlanResponseDTO, etc.
+exception/        GlobalExceptionHandler (@RestControllerAdvice)
 model/            Usuario, Plan, Suscripcion + enums/ (Rol, TipoPlan, EstadoSuscripcion)
 observability/    CorrelationIdFilter
-repository/       UsuarioRepository, PlanRepository, SuscripcionRepository (Spring Data JPA)
+repository/       UsuarioRepository, PlanRepository, SuscripcionRepository (Spring Data JPA) + projection/
 security/
   filter/         LoginRateLimitFilter
   jwt/            JwtAuthFilter, JwtUtil
   service/        UserDetailsServiceImpl
-service/          AuthService, PlanService, SuscripcionService, UsuarioService
+service/          AuthService, PlanService, SuscripcionService, UsuarioService, DashboardAdminService
+validation/       NotCommonPassword, NotCommonPasswordValidator
 ```
 
 ### 2.3 Modelo de datos
@@ -64,29 +67,33 @@ service/          AuthService, PlanService, SuscripcionService, UsuarioService
 **`Suscripcion`** (`suscripciones`):
 - `usuario` (`@ManyToOne` lazy), `plan` (`@ManyToOne` lazy), `fechaInicio`, `fechaFin`, `estado` (enum `EstadoSuscripcion`), `creadoEn`
 - `fechaFin` se calcula automáticamente en `@PrePersist`: `fechaInicio.plusDays(plan.getDuracionDias())` — nunca se setea manualmente
+- `@Version` (optimistic locking, agregado 2026-07-11) — protege contra dos requests modificando la misma fila a la vez (ej. doble cancelación). Complementado con índice único parcial en Postgres `uq_suscripcion_activa_por_usuario` (`scripts/migrations/001_unique_suscripcion_activa.sql`) que cierra el otro caso de la carrera: dos creaciones simultáneas de suscripción activa para el mismo usuario.
 
 ### 2.4 Endpoints completos
 
 **`/api/auth`** (`AuthController`) — públicos:
-- `POST /api/auth/register`
+- `POST /api/auth/register` — rol SIEMPRE forzado a `CLIENTE` server-side (ver §6.1, escalada de privilegios corregida)
 - `POST /api/auth/login`
 
 **`/api/planes`** (`PlanController`):
 - `POST /api/planes` — `ADMIN`
-- `GET /api/planes?activo=` — cualquier autenticado
+- `GET /api/planes?activo=&page=&size=` — cualquier autenticado, **paginado** (agregado 2026-07-11)
 - `GET /api/planes/{id}` — cualquier autenticado
 - `PUT /api/planes/{id}` — `ADMIN`
 - `PATCH /api/planes/{id}/estado?activo=` — `ADMIN`
 
 **`/api/suscripciones`** (`SuscripcionController`) — **todo `ADMIN`**:
 - `POST /api/suscripciones`
-- `GET /api/suscripciones/usuario/{usuarioId}`
-- `GET /api/suscripciones?estado=`
+- `GET /api/suscripciones/usuario/{usuarioId}?page=&size=` — paginado
+- `GET /api/suscripciones?estado=&page=&size=` — paginado
 - `PATCH /api/suscripciones/{id}/cancelar`
 
 **`/api/usuarios`** (`UsuarioController`) — **todo `ADMIN`**:
-- `GET /api/usuarios?rol=`
+- `GET /api/usuarios?rol=&page=&size=` — paginado
 - `PATCH /api/usuarios/{id}/estado?activo=`
+
+**`/api/dashboard/admin`** (`DashboardAdminController`, agregado 2026-07-12) — `ADMIN`:
+- `GET /api/dashboard/admin/estadisticas` — agregaciones server-side (usuarios activos por rol, ingresos estimados por tipo de plan sobre suscripciones `ACTIVA`, suscripciones por estado). Ver §9 para el detalle completo.
 
 **Actuator** (agregado 2026-07-07, ver §6):
 - `GET /actuator/health`, `/actuator/info` — públicos
@@ -136,13 +143,20 @@ de servlets de Tomcat. Genera/reutiliza `X-Request-ID`, lo pone en MDC
 (`correlationId`), se ve en todos los logs de ese request. Se limpia en el
 `finally` para no filtrar entre requests (los hilos de Tomcat se reusan).
 
-### 2.6 Cache — Redis
+### 2.6 Cache — Redis (removido, 2026-07-11)
 
-`RedisCacheConfig`: usa `GenericJackson2JsonRedisSerializer` (JSON, no
-serialización Java nativa — más rápido y legible desde `redis-cli`). TTL
-por defecto: 10 minutos. Actualmente cacheado: `PlanService.listar()` con
-clave `#activo != null ? #activo : 'todos'`, invalidado con `@CacheEvict`
-en `crear`, `actualizar`, `cambiarEstado`.
+**`RedisCacheConfig` fue eliminado del proyecto** (movido a
+`docs/codigo-removido/RedisCacheConfig.java.txt` como referencia, no como
+código activo). Usaba `GenericJackson2JsonRedisSerializer` con metadata de
+tipo (`@class`) en el JSON — hallazgo de seguridad 1.2 en
+`docs/THREAT_MODEL.md`: no se demostró RCE explotable con la configuración
+actual, pero cuando se sacó el único `@Cacheable` existente
+(`PlanService.listar()`, al agregar paginación) quedó como superficie
+muerta — riesgo de que alguien la reactive sin revisar el modelo de
+seguridad del serializer. `@EnableCaching` también removido de
+`GymflowBackendApplication`. **Redis se sigue usando** para
+`LoginRateLimitFilter` (rate limiting de auth), ahora con `requirepass`
+configurado (ver §6.1).
 
 ### 2.7 Observabilidad (agregado 2026-07-07)
 
@@ -319,6 +333,56 @@ permanentemente por haber estado público en GitHub en algún momento.
 
 ---
 
+## 6.1 Auditoría de seguridad multi-IA (2026-07-09 a 2026-07-13)
+
+Sesión extensa de auditoría de seguridad con colaboración entre Claude,
+Codex, y GLM-5.2 (vía Z Code), coordinada en `collab/` (ver
+`collab/MAPA.md` para el índice completo, y `docs/THREAT_MODEL.md` para el
+detalle exhaustivo de cada hallazgo). Resumen de lo más relevante:
+
+**Hallazgo más grave, no anticipado**: `RegisterRequest` aceptá un campo
+`rol` del cliente sin restricción — cualquiera podía registrarse como
+`ADMIN`. Corregido: el rol se fuerza a `CLIENTE` siempre, server-side.
+
+**Otros hallazgos críticos/altos confirmados y corregidos**:
+- Excepción sin manejar en `JwtAuthFilter` ante un JWT malformado (DoS
+  trivial) — ahora capturada, con límite de tamaño previo al parseo.
+- Redis sin autenticación y puerto expuesto a todas las interfaces —
+  ahora con `requirepass` y bind a `127.0.0.1`.
+- `LoginRateLimitFilter` sin manejo de fallo de Redis (crash accidental, no
+  política deliberada) — ahora fail-closed explícito (503, no 429) cuando
+  Redis no responde.
+- SSRF/path traversal en el proxy de Next.js (`new URL()` normalizaba
+  `..`) — corregido con validación de segmentos de path.
+- CSRF: backend tiene `.csrf(csrf -> csrf.disable())` por diseño (API
+  stateless), pero el proxy de Next.js ahora valida `Origin` como defensa
+  en profundidad.
+- Condición de carrera en `Suscripcion` (creación concurrente de más de
+  una suscripción activa) — cerrada con `@Version` (updates concurrentes)
+  + índice único parcial en Postgres (creaciones concurrentes).
+- Sin `@ControllerAdvice` global — agregado `GlobalExceptionHandler`,
+  cubre validación, credenciales inválidas (mensaje genérico anti-
+  enumeración), conflictos de integridad/optimistic locking, Redis caído.
+- Política de password débil (`min=8`, sin chequeo de comunes) — ahora
+  `min=12` sin regla de composición obligatoria (siguiendo NIST 800-63B,
+  tras evaluar tres opiniones: Claude, Codex, y una consulta externa a
+  ChatGPT) + validador `@NotCommonPassword` contra lista offline.
+
+**Corrección importante de un hallazgo propio**: la severidad Crítica
+original del hallazgo 1.2 (deserialización insegura vía Redis → RCE) se
+degradó tras validación en sandbox real por el plugin "Codex Security" —
+un harness Java confirmó que el `@class` no se interpreta como type hint
+ejecutable con la config actual, y que además el único sink (`@Cacheable`
+de `PlanService`) ya no existía tras el trabajo de paginación. Detalle
+completo en `docs/THREAT_MODEL.md` §7.5.
+
+**Regresiones de proceso detectadas y corregidas** (documentadas para no
+repetirlas): un cambio de firma de método en la paginación rompió la
+compilación de tests existentes porque nadie los corrió antes de dar el
+cambio por bueno (ver `collab/aplicado/2026-07-12-fix-tests-paginacion.md`).
+Desde entonces, toda tarea que cambie una firma pública debe verificar
+tests, no solo que el código de producción compile.
+
 ## 7. Pendientes conocidos (con contexto de por qué)
 
 1. **Migración a Spring Boot 4.x** (PRs Dependabot #4 y #7) — programada
@@ -327,12 +391,11 @@ permanentemente por haber estado público en GitHub en algún momento.
    `@MockBean`/`@SpyBean` removidos (afecta los 16 tests), Jackson 3
    (revisar serialización de `BigDecimal`).
 
-2. **Concurrencia y manejo de fallos** (Fase 5, parte pendiente) — aún no
-   iniciado. Áreas candidatas sin explorar todavía: manejo de condiciones
-   de carrera en `Suscripcion` (¿qué pasa si dos requests cancelan la misma
-   suscripción simultáneamente?), timeouts/circuit breakers hacia
-   Postgres/Redis, manejo de fallos de conexión a Redis (¿la app debe caer
-   si Redis no responde, o degradar sin cache?).
+2. **Concurrencia y manejo de fallos** (Fase 5) — **parcialmente resuelto**.
+   `Suscripcion` ya tiene `@Version` + índice único parcial (ver §6.1).
+   **Sigue pendiente**: timeouts/circuit breakers hacia Postgres/Redis —
+   propuesta encargada a Codex, sin completar aún (Codex sin disponibilidad
+   hasta 2026-07-17, ver `collab/MAPA.md` para estado actualizado).
 
 3. **Deploy a Railway** — checklist conocido:
    - Actualizar `CorsConfigurationSource` en `SecurityConfig.java` con el
@@ -359,6 +422,24 @@ permanentemente por haber estado público en GitHub en algún momento.
    quiere volver a necesitar Python/pip cómodamente.
 
 ---
+
+## 9. Dashboard ADMIN (agregado 2026-07-12)
+
+Trabajo cruzado entre GLM-5.2 (spec + componente frontend con Recharts,
+`collab/propuestas/glm/dashboard-admin-charts.md`) y Codex (backend,
+`GET /api/dashboard/admin/estadisticas`). Ambos coincidieron exacto en la
+forma del JSON sin fricción de integración — confirmado por Claude leyendo
+ambos lados.
+
+**Decisiones de negocio tomadas**: "usuarios activos" filtra `activo=true`;
+"ingresos estimados" suma `precio` de suscripciones en estado `ACTIVA`
+únicamente (no histórico completo). Las tres categorías (roles, tipos de
+plan, estados) siempre aparecen en la respuesta aunque el conteo sea cero,
+para que el frontend no tenga que manejar campos faltantes.
+
+**Pendiente**: integrar el componente real de GLM con el endpoint (hoy el
+componente usa datos mock), y decidir si se agrega `recharts` como
+dependencia nueva (~150KB gzip, sin instalar todavía).
 
 ## 8. Decisiones de diseño (el "por qué", no solo el "qué")
 
