@@ -19,9 +19,10 @@ que el componente aislado funcione.
 4. Submit → queda logueado automáticamente (rol CLIENTE) → redirige a `/dashboard`.
 5. Ve su dashboard de cliente (no el de admin).
 
-**Estado:** ✅ implementado y verificado con smoke test automatizado
-(`e2e/registro.spec.ts` en `gymflow-frontend`, Playwright, 15 jul 2026).
-Pendiente: re-confirmar contra Railway (prod), solo corrido en local hasta ahora.
+**Estado:** ✅ implementado y verificado con smoke test automatizado, tanto
+local como contra producción (Railway) — `e2e/registro.spec.ts` en
+`gymflow-frontend`, Playwright, 15 jul 2026
+(`BASE_URL=https://gymflow-frontend-production.up.railway.app npm run test:e2e`).
 
 ## 2. Admin gestiona usuarios
 1. Login como ADMIN.
@@ -54,6 +55,6 @@ después del deploy. Pendiente re-confirmar en producción.
 
 ## Próximos pasos
 - [x] Agregar smoke test de Playwright para el Journey 1 (registro → dashboard). (15 jul 2026)
-- [ ] Re-verificar Journey 1 contra producción (Railway), no solo local.
+- [x] Re-verificar Journey 1 contra producción (Railway). (15 jul 2026, passed)
 - [ ] Re-verificar Journey 3 en producción (Railway) tras el deploy del 14 jul 2026.
 - [ ] Decidir si Journey 2 necesita endpoint de cambio de rol o se deja solo admin-por-SQL.
