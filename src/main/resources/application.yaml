@@ -15,7 +15,11 @@ spring:
       # para que Hibernate NUNCA modifique el esquema solo, y usar migraciones
       # controladas (Flyway/Liquibase) para cualquier cambio real.
       ddl-auto: ${DDL_AUTO:update}
-    show-sql: ${SHOW_SQL:true}
+    # Fix security-deep-dive §5 (GLM-5.2): default cambiado de true a false.
+    # show-sql loguea cada query con parámetros reales (emails, hashes) a
+    # stdout; en Railway esos logs se persisten. Setear SHOW_SQL=true solo
+    # en dev local si se necesita depurar queries.
+    show-sql: ${SHOW_SQL:false}
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -91,6 +95,17 @@ info:
     description: API de gestión de gimnasios - planes, suscripciones y usuarios
   java:
     version: ${java.version:21}
+
+# Fix security-deep-dive §2 (GLM-5.2): Swagger UI + /v3/api-docs quedaban
+# accesibles sin restricción (permitAll en SecurityConfig), exponiendo toda
+# la superficie de la API (endpoints, DTOs, validaciones) a cualquiera sin
+# autenticación. Default ahora es false; setear SWAGGER_ENABLED=true solo
+# en dev/staging donde se necesite la UI.
+springdoc:
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
 
 app:
   jwt:

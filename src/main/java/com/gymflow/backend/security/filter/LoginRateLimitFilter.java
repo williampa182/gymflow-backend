@@ -47,15 +47,24 @@ public class LoginRateLimitFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         String path = request.getRequestURI();
-        boolean esRutaAuth = path.equals("/api/auth/login") || path.equals("/api/auth/register");
+        boolean esLogin = path.equals("/api/auth/login");
+        boolean esRegister = path.equals("/api/auth/register");
 
-        if (!esRutaAuth) {
+        if (!esLogin && !esRegister) {
             filterChain.doFilter(request, response);
             return;
         }
 
+        // Fix security-deep-dive §7 (GLM-5.2): antes login y register
+        // compartían la misma key de Redis por IP, así que 10 registros
+        // basura agotaban también el límite de login para esa IP (y
+        // viceversa). Separar por ruta evita ese agotamiento cruzado. El
+        // límite (10/min) sigue siendo el mismo para ambas rutas por ahora;
+        // ajustar MAX_INTENTOS_POR_MINUTO por ruta es un cambio aparte si
+        // se decide que register necesita un límite distinto a login.
         String ip = obtenerIpCliente(request);
-        String key = "ratelimit:auth:" + ip;
+        String rutaKey = esLogin ? "login" : "register";
+        String key = "ratelimit:auth:" + rutaKey + ":" + ip;
 
         Long intentos;
         try {
