@@ -1,0 +1,10 @@
+target/
+.git/
+*.log
+.vscode/
+.idea/
+docs/
+collab/
+scripts/backup-local.ps1
+scripts/restore-local.ps1
+backups/

@@ -171,8 +171,8 @@ La sección 8 (`ARCHITECTURE.md`) del proyecto ya documenta el porqué de varias
 - **Mitigación:** Comentario explícito en el archivo o separación clara del compose de producción para evitar repetir el incidente del JWT secret purgado.
 
 ### 4.6 Contenedor backend potencialmente corriendo como root
-- **Severidad:** Baja individualmente, multiplica el daño de 1.2 si se combina
-- **Mitigación:** `USER` no-root explícito en el Dockerfile.
+- **Severidad:** ~~Baja individualmente, multiplica el daño de 1.2 si se combina~~ **RESUELTO (2026-07-13)**
+- **Mitigación:** ~~`USER` no-root explícito en el Dockerfile.~~ **Aplicado.** No existía `Dockerfile` propio (por eso no aplicaba antes). Ahora existe, con usuario `gymflow` sin privilegios desde el diseño inicial, no como parche posterior. Verificado en runtime: build exitoso + contenedor real respondiendo `actuator/health` con `status: UP`. Ver `collab/aplicado/2026-07-13-dockerfile-backend.md`.
 
 ---
 
