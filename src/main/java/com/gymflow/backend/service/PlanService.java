@@ -7,6 +7,9 @@ import com.gymflow.backend.repository.PlanRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -14,6 +17,16 @@ import org.springframework.stereotype.Service;
 public class PlanService {
 
     private final PlanRepository planRepository;
+
+    private boolean isAdminUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(authority -> authority.equals("ROLE_ADMIN"));
+    }
 
     @SuppressWarnings("null")
     public PlanResponseDTO crear(PlanRequestDTO request) {
@@ -41,8 +54,12 @@ public class PlanService {
     // página tendría cardinalidad alta y poco valor real de cache. Si se
     // quiere volver a cachear, hace falta una política específica para eso.
     public Page<PlanResponseDTO> listar(Boolean activo, Pageable pageable) {
-        Page<Plan> planes = (activo != null)
-                ? planRepository.findByActivo(activo, pageable)
+        Boolean effectiveActivo = activo;
+        if (!isAdminUser()) {
+            effectiveActivo = true;
+        }
+        Page<Plan> planes = (effectiveActivo != null)
+                ? planRepository.findByActivo(effectiveActivo, pageable)
                 : planRepository.findAll(pageable);
 
         return planes.map(this::toDTO);
@@ -52,6 +69,10 @@ public class PlanService {
     public PlanResponseDTO obtenerPorId(Long id) {
         Plan plan = planRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Plan no encontrado con id: " + id));
+
+        if (!plan.isActivo() && !isAdminUser()) {
+            throw new RuntimeException("Plan no encontrado con id: " + id);
+        }
         return toDTO(plan);
     }
 
