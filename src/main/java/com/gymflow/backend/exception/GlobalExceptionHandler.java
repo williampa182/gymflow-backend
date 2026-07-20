@@ -104,6 +104,13 @@ public class GlobalExceptionHandler {
         String m = msg.toLowerCase();
         if (m.contains("no encontrad")) return HttpStatus.NOT_FOUND;
         if (m.contains("ya existe") || m.contains("ya tiene una suscripción")) return HttpStatus.CONFLICT;
+        // Mensaje genérico de AuthService cuando reveal-email-exists-on-register=false
+        // (ver collab/aplicado/2026-07-16-decision-reveal-email-false.md). No contiene
+        // "ya existe" a propósito (es el punto: no revelar), pero sigue siendo
+        // semánticamente un conflicto de recurso -> 409, no 500. Sin este match caía
+        // en INTERNAL_SERVER_ERROR: status incorrecto, mensaje pisado, y logueado
+        // como error real en cada intento de registro duplicado.
+        if (m.contains("si ya tenés una cuenta")) return HttpStatus.CONFLICT;
         if (m.contains("solo se pueden")) return HttpStatus.BAD_REQUEST;
         return HttpStatus.INTERNAL_SERVER_ERROR;
     }
