@@ -1,12 +1,14 @@
 package com.gymflow.backend.config;
 
+import com.gymflow.backend.security.auth.TimingSafeAuthenticationProvider;
 import com.gymflow.backend.security.filter.LoginRateLimitFilter;
 import com.gymflow.backend.security.jwt.JwtAuthFilter;
+import com.gymflow.backend.security.service.UserDetailsServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -32,13 +34,21 @@ public class SecurityConfig {
     // Cost factor de BCrypt fijado explícitamente (hallazgo 4.1 del
     // THREAT_MODEL.md). Antes se usaba el default implícito de la librería,
     // que no era una decisión visible del proyecto. 12 es el mínimo
-    // recomendado hoy. Subir esto solo afecta passwords nuevos/verificaciones
-    // futuras — los hashes existentes con menor costo siguen validando
-    // porque el costo va embebido en el propio hash BCrypt.
-    private static final int BCRYPT_STRENGTH = 12;
+    // recomendado hoy. Subir esto solo afecta passwords nuevos por defecto —
+    // los hashes existentes con menor costo siguen validando porque el costo
+    // va embebido en el propio hash BCrypt. OJO: eso reabre el mismo canal de
+    // timing que cerró Fix B (user-enumeration-3.1.md) si un usuario viejo
+    // queda en un costo distinto al de TimingSafeAuthenticationProvider.DUMMY_HASH
+    // (nos pasó: hallazgo del 18/07, ver collab/aplicado/). Por eso
+    // AuthService.login() rehashea automáticamente en el primer login exitoso
+    // si detecta un costo desactualizado — public para que AuthService pueda
+    // comparar contra este valor sin duplicarlo.
+    public static final int BCRYPT_STRENGTH = 12;
 
     private final JwtAuthFilter jwtAuthFilter;
     private final LoginRateLimitFilter loginRateLimitFilter;
+    private final UserDetailsServiceImpl userDetailsService;
+    private final PasswordEncoder passwordEncoder;
 
     // Origenes permitidos para CORS. En local por defecto solo localhost:3000;
     // en Railway se define ALLOWED_ORIGINS con la(s) URL(s) real(es) del
@@ -53,6 +63,16 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
+                // §2 (security-deep-dive-additional-findings.md): los endpoints
+                // de Swagger/OpenAPI se controlan via springdoc.api-docs.enabled
+                // y springdoc.swagger-ui.enabled en application.yaml (default
+                // false). Cuando están deshabilitados, springdoc NO registra
+                // los handlers — estos permitAll() no matchean nada en
+                // producción, son inofensivos. En dev (SWAGGER_ENABLED=true),
+                // springdoc registra los handlers y estos permitAll() los
+                // dejan accesibles sin auth, que es lo querido para debugging.
+                // No condicionamos acá con @ConditionalOnProperty para no
+                // agregar complejidad: la defensa real está en el yaml.
                 .requestMatchers(
                     "/swagger-ui/**",
                     "/swagger-ui.html",
@@ -85,13 +105,27 @@ public class SecurityConfig {
     }
 
     @Bean
-    public AuthenticationManager authenticationManager(
-            AuthenticationConfiguration config) throws Exception {
-        return config.getAuthenticationManager();
+    public AuthenticationManager authenticationManager() {
+        // Fix B (user-enumeration-3.1.md): construimos explícitamente el
+        // DaoAuthenticationProvider con nuestro UserDetailsService y
+        // PasswordEncoder, lo envolvemos en TimingSafeAuthenticationProvider
+        // que ejecuta un BCrypt dummy cuando el usuario no existe (eliminando
+        // el delta de timing que permitía enumeración), y exponemos el wrapper
+        // como AuthenticationManager.
+        //
+        // Construimos manualmente en vez de usar
+        // AuthenticationConfiguration.getAuthenticationManager() para tener
+        // control total sobre qué provider se usa y poder envolverlo. La
+        // config automática de Spring haría difícil interceptar el provider
+        // default sin ambigüedad.
+        DaoAuthenticationProvider daoProvider = new DaoAuthenticationProvider(userDetailsService);
+        daoProvider.setPasswordEncoder(passwordEncoder);
+
+        return new TimingSafeAuthenticationProvider(daoProvider, passwordEncoder);
     }
 
     @Bean
-    public PasswordEncoder passwordEncoder() {
+    public static PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder(BCRYPT_STRENGTH);
     }
 }
