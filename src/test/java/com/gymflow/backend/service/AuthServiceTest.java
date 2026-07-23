@@ -184,6 +184,22 @@ class AuthServiceTest {
         verify(usuarioRepository, never()).save(any());
     }
 
+    @Test
+    void login_includeTokenInResponseDeshabilitado_retornaRespuestaSinToken() {
+        LoginRequest request = loginRequest();
+        Authentication authentication = authenticatedAs(EMAIL);
+        Usuario usuario = usuario(CURRENT_COST_HASH);
+        prepareSuccessfulLogin(authentication, usuario);
+        ReflectionTestUtils.setField(authService, "includeTokenInResponse", false);
+
+        AuthResponse response = authService.login(request);
+
+        assertThat(response.getToken()).isNull();
+        assertThat(response.getTipo()).isNull();
+        assertThat(response.getId()).isEqualTo(1L);
+        assertThat(response.getEmail()).isEqualTo(EMAIL);
+    }
+
     private RegisterRequest registerRequest() {
         RegisterRequest request = new RegisterRequest();
         request.setNombre("Cliente GymFlow");

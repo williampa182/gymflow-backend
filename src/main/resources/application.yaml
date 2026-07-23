@@ -117,6 +117,10 @@ app:
     # entorno real, aunque el historial se limpie después.
     secret: ${JWT_SECRET:dev-only-a8f3c91e2b7d4f60193a5c8e7b2d4f019a3c6e8b1d5f7a90c2e4b6d8f0a1c3e5}
     expiration: ${JWT_EXPIRATION:86400000}
+    # Fix security-deep-dive §4 (GLM-5.2): Opción C de la propuesta.
+    # Controla si AuthResponse incluye el token JWT en el JSON de respuesta de login/register.
+    # Default true mantiene el comportamiento actual intacto. Setear false cuando se use cookie httpOnly exclusivamente.
+    include-token-in-response: ${JWT_INCLUDE_TOKEN_IN_RESPONSE:true}
   security:
     # Fix A (user-enumeration-3.1.md). Decisión: default false.
     # Razón: ver collab/aplicado/2026-07-16-decision-reveal-email-false.md.

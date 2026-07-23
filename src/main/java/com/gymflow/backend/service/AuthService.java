@@ -45,6 +45,12 @@ public class AuthService {
     @Value("${app.security.reveal-email-exists-on-register:false}")
     private boolean revealEmailExists;
 
+    // Fix security-deep-dive §4 (GLM-5.2): Opción C de la propuesta.
+    // Controla si AuthResponse incluye el token JWT en el JSON de respuesta de login/register.
+    // Default true mantiene el comportamiento actual intacto.
+    @Value("${app.jwt.include-token-in-response:true}")
+    private boolean includeTokenInResponse = true;
+
     @SuppressWarnings("null")
     public AuthResponse registrar(RegisterRequest request) {
         if (usuarioRepository.existsByEmail(request.getEmail())) {
@@ -125,8 +131,8 @@ public class AuthService {
 
     private AuthResponse buildResponse(String token, Usuario usuario) {
         return AuthResponse.builder()
-                .token(token)
-                .tipo("Bearer")
+                .token(includeTokenInResponse ? token : null)
+                .tipo(includeTokenInResponse ? "Bearer" : null)
                 .id(usuario.getId())
                 .nombre(usuario.getNombre())
                 .email(usuario.getEmail())
