@@ -13,6 +13,19 @@
 
 ---
 
+> **Nota de vigencia (2026-07-23)**: la sección 5 (tabla de priorización) y
+> las secciones 1-4 de abajo reflejan el estado ORIGINAL del análisis
+> (2026-07-09/10). El estado REAL actualizado está en la sección 7
+> ("Auditoría de código real") y en
+> `collab/aplicado/2026-07-23-auditoria-pendientes-reales.md`. Resumen
+> honesto: de los hallazgos de este documento, solo **§2.2** (X-Forwarded-For
+> sin validar) y la **verificación en Railway del índice único de §2.3**
+> siguen genuinamente abiertos. §1.3 (CVE-2026-40976) se verificó como
+> NO aplicable — Boot 4.1.0 ya está fuera del rango afectado (4.0.0-4.0.5)
+> y además el proyecto tiene `SecurityConfig` propio. Todo lo demás está
+> resuelto — ver el detalle en la sección 7 y en el archivo de auditoría
+> citado arriba.
+
 ## Cómo leer este documento
 
 Cada hallazgo tiene:
@@ -236,6 +249,45 @@ Esto quedó documentado en el propio JSON de salida de Codex Security con
 formato `triage-finding/v0`, incluyendo cadena de razonamiento, evidencia,
 y contraevidencia — exactamente el tipo de segunda opinión con capacidad de
 validación en sandbox que ni Claude leyendo código ni William podían hacer.
+
+### 7.6 Auditoría de pendientes reales (Claude, 2026-07-23)
+
+> Ver `collab/aplicado/2026-07-23-auditoria-pendientes-reales.md` para el
+> detalle completo con evidencia línea por línea.
+
+**§1.3 (CVE-2026-40976) — verificado como NO aplicable.** El documento
+original lo marcaba como "riesgo futuro" pendiente de la migración a
+Spring Boot 4.x. Esa migración ya ocurrió (4.1.0). Verificado contra el
+advisory oficial (spring.io/security/cve-2026-40976): el rango afectado
+es 4.0.0–4.0.5, corregido en 4.0.6+. GymFlow está en 4.1.0, fuera de
+rango. Además, la CVE solo aplica a apps que dependen del filter chain
+por default de Spring Security sin configuración propia — GymFlow tiene
+`SecurityConfig.java` explícito, segunda razón independiente por la que
+no aplica. **Cerrado, sin acción requerida.**
+
+**§1.4 (DevTools) — riesgo bajo confirmado, no bloqueante.**
+`spring-boot-devtools` tiene `scope=runtime` + `optional=true` en
+`pom.xml`, configuración estándar que Maven excluye del JAR de
+producción automáticamente. No verificable si Railway usa un build
+alternativo que ignore esto, pero es el comportamiento por defecto.
+
+**§2.2 (X-Forwarded-For) — sigue genuinamente abierto.** Documentado
+explícitamente en comentario de código
+(`LoginRateLimitFilter.java:109-121`) como limitación conocida, sin fix
+aplicado. Requiere conocer el rango de IP del proxy de Railway para
+validar contra eso.
+
+**§2.3 (unique constraint suscripción activa) — aplicado en dev,
+verificación en Railway (prod) pendiente.** No verificable desde esta
+sesión por falta de acceso a esa base de datos.
+
+**Hallazgo nuevo, no cubierto en este documento — 3 vulnerabilidades
+HIGH en dependencias del frontend.** `npm audit` en `gymflow-frontend`
+reporta HIGH en la cadena `next`/`postcss`/`sharp` (SSRF, DoS, XSS,
+lectura arbitraria de archivos vía sourceMappingURL). Fix disponible
+(`next@16.2.11`, bump de parche). No aplicado todavía — pendiente de
+decisión de William. Esto es supply-chain (relacionado con §4.3 de
+este documento), no un bug de código propio.
 
 ## 6. Lo que este documento NO cubre (límites honestos del análisis)
 
