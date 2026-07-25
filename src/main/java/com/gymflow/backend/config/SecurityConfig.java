@@ -80,6 +80,15 @@ public class SecurityConfig {
                 ).permitAll()
                 .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
+                // Endpoint de diagnóstico para verificar el comportamiento real
+                // de X-Forwarded-For/RemoteIpValve (fix hallazgo 2.2). Igual que
+                // Swagger arriba: el propio bean está gateado por
+                // @ConditionalOnProperty (app.debug-headers.enabled, default
+                // false) — si el flag está apagado el controller ni se registra,
+                // así que este permitAll() es inofensivo en producción. Sin auth
+                // porque el uso es verificación manual puntual, no un endpoint
+                // que deba quedar activo de forma permanente.
+                .requestMatchers("/api/v1/debug/**").permitAll()
                 .anyRequest().authenticated()
             )
             .sessionManagement(session ->

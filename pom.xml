@@ -122,6 +122,25 @@
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<!-- Spring Boot 4.x movió TestRestTemplate a un artefacto modular
+		     separado (antes venía incluido en spring-boot-starter-test /
+		     el starter web clásico). Necesario para los tests de
+		     RemoteIpValve (fix 2.2) y del diagnostic controller, que
+		     necesitan un servidor embebido real (RANDOM_PORT) — MockMvc no
+		     sirve acá porque no pasa por el pipeline de Valves de Tomcat. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-resttestclient</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- TestRestTemplateTestAutoConfiguration necesita RestTemplateBuilder
+		     internamente, que en Spring Boot 4.x vive en un módulo separado
+		     y no se trae de forma transitiva con lo anterior. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-restclient</artifactId>
+			<scope>test</scope>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.security</groupId>
 			<artifactId>spring-security-test</artifactId>

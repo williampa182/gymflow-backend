@@ -50,9 +50,36 @@ server:
   # leer — si se necesita un límite duro para application/json específicamente,
   # hace falta un filtro dedicado que corte por Content-Length/bytes reales.
   max-http-request-header-size: ${MAX_HTTP_REQUEST_HEADER_SIZE:8KB}
+  # Hallazgo 2.2 del THREAT_MODEL.md: LoginRateLimitFilter confiaba en
+  # X-Forwarded-For tal cual llegaba (primer elemento), sin validar que el
+  # request viniera realmente del proxy de Railway — un atacante podía
+  # mandar directo ese header y rotar la IP "vista" para evadir el rate
+  # limit. RemoteIpValve (activado acá vía forward-headers-strategy:
+  # native) resuelve la IP real leyendo X-Forwarded-For de derecha a
+  # izquierda, descartando los saltos que matcheen internal-proxies, hasta
+  # encontrar el primer valor no interno. Esto es más robusto que asumir
+  # una posición fija: Railway agrega (no reemplaza) la IP real al final de
+  # la lista, y el propio soporte de Railway indica que el hop count no
+  # está garantizado como estable — ver
+  # collab/propuestas/2026-07-24-propuesta-fix-threat-model-2.2-v2-tomcat-native.md
+  # para el research y la matriz de escenarios verificada.
+  # Rangos cubiertos: 10.0.0.0/8 (privada), 100.64.0.0/10 (CGNAT, red mesh
+  # de Railway), 172.16.0.0/12 (docker/containers), 127.0.0.0/8 y loopback
+  # IPv6 (proxy local).
+  # OJO: este regex NO se envuelve en ${VAR:default} — los cuantificadores
+  # {1,3} del regex usan llaves sueltas (sin $) que el resolver de
+  # placeholders de Spring no distingue de las del propio placeholder,
+  # cortando la sustitución en la primera "}" que encuentra. Si algún día
+  # hace falta hacerlo configurable, hay que hacerlo vía un profile/archivo
+  # de properties separado, no con ${ENV:default} inline.
+  forward-headers-strategy: native
   tomcat:
     max-http-form-post-size: ${MAX_HTTP_FORM_POST_SIZE:2MB}
     max-swallow-size: ${MAX_SWALLOW_SIZE:2MB}
+    remote-ip-header: X-Forwarded-For
+    protocol-header: X-Forwarded-Proto
+    internal-proxies: >-
+      10\.\d{1,3}\.\d{1,3}\.\d{1,3}|100\.(6[4-9]|[7-9]\d|1[0-1]\d|12[0-7])\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|0:0:0:0:0:0:0:1|::1
   # Hallazgo 3.6 del THREAT_MODEL.md: sin esto, un stack trace completo o la
   # Whitelabel Error Page podían quedar expuestos si el perfil prod no
   # estaba bien seteado — esto lo hace explícito independientemente del
@@ -130,6 +157,9 @@ app:
     # Setear REVEAL_EMAIL_EXISTS=true solo si el contexto del despliegue
     # justifica priorizar UX sobre consistencia del threat model.
     reveal-email-exists-on-register: ${REVEAL_EMAIL_EXISTS:false}
+
+  debug-headers:
+    enabled: ${APP_DEBUG_HEADERS_ENABLED:false}
 
 logging:
   level:

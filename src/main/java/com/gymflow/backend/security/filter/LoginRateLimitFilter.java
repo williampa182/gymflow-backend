@@ -106,24 +106,21 @@ public class LoginRateLimitFilter extends OncePerRequestFilter {
     }
 
     private String obtenerIpCliente(HttpServletRequest request) {
-        // LIMITACIÓN CONOCIDA (hallazgo 2.2 del THREAT_MODEL.md): este método
-        // confía en el header X-Forwarded-For tal cual llega, sin validar que
-        // el request realmente pasó por el proxy de Railway. Un cliente que
-        // hable directo con el backend (bypaseando el proxy) puede mandar
-        // cualquier valor acá y rotar la IP "vista" en cada intento,
-        // esquivando el rate limit por completo.
+        // Fix hallazgo 2.2 del THREAT_MODEL.md (2026-07-24). Antes este
+        // método confiaba en el primer elemento de X-Forwarded-For tal cual
+        // llegaba, sin validar que el request viniera realmente del proxy de
+        // Railway — un atacante podía mandar ese header directo y rotar la
+        // IP "vista" en cada intento, evadiendo el rate limit por completo.
         //
-        // La mitigación correcta requiere confiar en este header SOLO cuando
-        // la conexión entrante viene de la red interna/IP conocida del proxy
-        // de Railway (no siempre expuesta o estática en PaaS), por lo que no
-        // se resuelve acá de forma genérica. Mientras tanto: asegurar que el
-        // backend NO sea alcanzable directamente desde internet (solo vía el
-        // proxy/red interna de Railway) reduce el riesgo de bypass, aunque no
-        // lo elimina si alguien logra hablarle directo al contenedor.
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
+        // Ahora RemoteIpValve (server.forward-headers-strategy: native +
+        // server.tomcat.internal-proxies en application.yaml) ya resolvió la
+        // IP real ANTES de que este filtro vea el request: procesa
+        // X-Forwarded-For de derecha a izquierda, descarta los saltos que
+        // matcheen la red interna de Railway/Docker, y reemplaza
+        // request.getRemoteAddr() con la primera IP no interna encontrada.
+        // Ver collab/propuestas/2026-07-24-propuesta-fix-threat-model-2.2-v2-tomcat-native.md
+        // para el research y la matriz de escenarios verificada (por qué
+        // rightmost y no leftmost, y por qué no se usa X-Envoy-External-Address).
         return request.getRemoteAddr();
     }
 }
