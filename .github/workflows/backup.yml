@@ -32,7 +32,15 @@ jobs:
         # servidor, así que esto tiene que apuntar a la de producción, no a
         # la local. Pendiente: alinear docker-compose.yml a 18 también para
         # que dev/CI/prod no diverjan (ver MAPA.md).
+        #
+        # Ubuntu 24.04 solo trae el client 16 en sus repos por defecto (por
+        # eso ese venía preinstalado). El 18 no está en universe/main de
+        # noble — hace falta agregar el repositorio oficial de PGDG con el
+        # script apt.postgresql.org.sh antes de poder instalarlo.
         run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
           sudo apt-get update
           sudo apt-get install -y postgresql-client-18
 
