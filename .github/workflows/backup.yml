@@ -23,13 +23,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Instalar cliente de PostgreSQL 16 (pg_dump)
-        # Debe coincidir con la versión mayor del Postgres de producción
-        # (16, ver docker-compose.yml) para evitar problemas de compatibilidad
-        # de formato de dump entre versiones distintas.
+      - name: Instalar cliente de PostgreSQL 18 (pg_dump)
+        # Debe coincidir con la versión mayor del Postgres REAL de
+        # producción en Railway (18, confirmado por el error "server version
+        # mismatch" del 2026-07-26 al usar client 16). docker-compose.yml
+        # local sigue en postgres:16 — es una versión distinta a la de
+        # Railway; pg_dump exige que el cliente sea igual o más nuevo que el
+        # servidor, así que esto tiene que apuntar a la de producción, no a
+        # la local. Pendiente: alinear docker-compose.yml a 18 también para
+        # que dev/CI/prod no diverjan (ver MAPA.md).
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client-16
+          sudo apt-get install -y postgresql-client-18
 
       - name: Generar dump comprimido
         env:
