@@ -47,6 +47,14 @@ jobs:
       - name: Generar dump comprimido
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          # Debian/Ubuntu instalan cada versión de postgresql-client en
+          # paralelo bajo /usr/lib/postgresql/<version>/bin/ y NO actualizan
+          # solos el symlink genérico /usr/bin/pg_dump al instalar una
+          # versión nueva (quedó apuntando al 16 preinstalado, causando el
+          # mismo "server version mismatch" incluso con el 18 ya instalado).
+          # Se apunta directo al binario versionado para evitar la
+          # ambigüedad del PATH por completo.
+          PG_DUMP_18: /usr/lib/postgresql/18/bin/pg_dump
         run: |
           set -euo pipefail
           if [ -z "${DATABASE_URL:-}" ]; then
@@ -55,7 +63,7 @@ jobs:
           fi
           TIMESTAMP=$(date -u +"%Y%m%d_%H%M%S")
           echo "BACKUP_FILE=gymflow_prod_${TIMESTAMP}.sql.gz" >> "$GITHUB_ENV"
-          pg_dump "$DATABASE_URL" --clean --if-exists --no-owner | gzip -9 > "gymflow_prod_${TIMESTAMP}.sql.gz"
+          "$PG_DUMP_18" "$DATABASE_URL" --clean --if-exists --no-owner | gzip -9 > "gymflow_prod_${TIMESTAMP}.sql.gz"
 
       - name: Verificar integridad del dump
         # No es una restauración completa (eso sería más costoso en minutos
