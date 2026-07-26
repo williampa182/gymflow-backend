@@ -24,6 +24,43 @@ jobs:
     name: Compilar y correr tests
     runs-on: ubuntu-latest
 
+    # Bug encontrado el 2026-07-26: varios tests son @SpringBootTest y
+    # necesitan un contexto completo con Postgres/Redis reales (DTO mass
+    # assignment, regresión de privilege escalation, JWT malformado, header
+    # de diagnóstico). El comentario viejo de este workflow decía "Mockito
+    # puro, sin Docker" — cierto cuando se escribió, desactualizado desde que
+    # se agregaron esos tests. Sin este bloque, CI fallaba silenciosamente
+    # con "Connection to localhost:5432 refused" en todos ellos.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: gymflow_db
+          POSTGRES_USER: gymflow_user
+          POSTGRES_PASSWORD: gymflow_pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      # La imagen oficial de redis no soporta requirepass via env var (a
+      # diferencia de postgres). En CI corre sin auth — riesgo aceptable:
+      # contenedor efímero, sin exposición fuera del runner. REDIS_PASSWORD
+      # se pisa a vacío más abajo para que el cliente no mande AUTH contra
+      # un servidor que no lo pide.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       # Actions oficiales de la organización "actions" (mantenidas por GitHub,
       # badge de Verified creator). Pineadas a versión mayor; Dependabot
@@ -43,8 +80,17 @@ jobs:
         # Linux y necesita el permiso explícito para ejecutar el script.
         run: chmod +x ./mvnw
 
-      - name: Compilar y correr tests unitarios
-        # Los 16 tests son Mockito puro (sin contexto Spring), no requieren
-        # Docker/PostgreSQL/Redis. GymflowBackendApplicationTests está
-        # @Disabled por depender de Docker, así que no se ejecuta aquí.
+      - name: Compilar y correr tests
+        # Variables coherentes con .env.example / docker-compose.yml. Los
+        # tests puramente Mockito no las necesitan pero no interfieren; los
+        # @SpringBootTest sí las requieren para levantar el contexto.
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: gymflow_db
+          DB_USER: gymflow_user
+          DB_PASSWORD: gymflow_pass
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          REDIS_PASSWORD: ""
         run: ./mvnw -B test
