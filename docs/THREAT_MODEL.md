@@ -13,18 +13,25 @@
 
 ---
 
-> **Nota de vigencia (2026-07-23)**: la sección 5 (tabla de priorización) y
+> **Nota de vigencia (2026-07-27)**: la sección 5 (tabla de priorización) y
 > las secciones 1-4 de abajo reflejan el estado ORIGINAL del análisis
 > (2026-07-09/10). El estado REAL actualizado está en la sección 7
-> ("Auditoría de código real") y en
-> `collab/aplicado/2026-07-23-auditoria-pendientes-reales.md`. Resumen
-> honesto: de los hallazgos de este documento, solo **§2.2** (X-Forwarded-For
-> sin validar) y la **verificación en Railway del índice único de §2.3**
-> siguen genuinamente abiertos. §1.3 (CVE-2026-40976) se verificó como
-> NO aplicable — Boot 4.1.0 ya está fuera del rango afectado (4.0.0-4.0.5)
-> y además el proyecto tiene `SecurityConfig` propio. Todo lo demás está
-> resuelto — ver el detalle en la sección 7 y en el archivo de auditoría
-> citado arriba.
+> ("Auditoría de código real"). Resumen honesto y verificado contra código
+> real en esta fecha: **no queda ningún hallazgo de código abierto en este
+> documento.** §2.2 (X-Forwarded-For) se cerró el 2026-07-24 vía
+> `RemoteIpValve` nativo de Tomcat (ver `LoginRateLimitFilter.java` y
+> `collab/propuestas/2026-07-24-propuesta-fix-threat-model-2.2-v2-tomcat-native.md`).
+> §2.3 (índice único de suscripción activa) se verificó cerrado también en
+> Railway (prod) el mismo día. Las 3 vulnerabilidades HIGH de npm
+> (`next`/`postcss`/`sharp`, hallazgo de la sección 7.6) están resueltas:
+> `npm audit` da 0 vulnerabilidades (verificado 2026-07-27). §1.3
+> (CVE-2026-40976) se verificó como NO aplicable — Boot 4.1.0 ya está fuera
+> del rango afectado (4.0.0-4.0.5) y además el proyecto tiene
+> `SecurityConfig` propio. Lo único que sigue sin verificación directa
+> (no por falta de fix, sino porque requiere acceso a la consola de
+> Railway que esta sesión no tiene) es confirmar en runtime de producción
+> que `requirepass` de Redis (§1.1) está efectivamente activo ahí — en
+> dev/`docker-compose.yml` está confirmado.
 
 ## Cómo leer este documento
 
@@ -79,9 +86,9 @@ La sección 8 (`ARCHITECTURE.md`) del proyecto ya documenta el porqué de varias
 
 ### 2.2 `X-Forwarded-For` sin validar contra proxy confiable
 - **Severidad:** Alta
-- **Estado:** Sin confirmar.
+- **Estado:** **RESUELTO (2026-07-24).**
 - **Impacto:** Si el filtro de rate limiting confía ciegamente en el header `X-Forwarded-For` sin validar que proviene realmente del proxy de Railway, un atacante puede mandar un valor distinto en cada request y hacer que cada intento cuente como una IP diferente — bypass total del rate limit de login sin tocar Redis.
-- **Mitigación:** Validar que el request entra desde la IP del proxy conocido de Railway antes de confiar en `X-Forwarded-For`; si no, usar `getRemoteAddr()` directo.
+- **Mitigación:** ~~Validar que el request entra desde la IP del proxy conocido de Railway antes de confiar en `X-Forwarded-For`; si no, usar `getRemoteAddr()` directo.~~ **Aplicado** vía `RemoteIpValve` nativo de Tomcat (`server.forward-headers-strategy: native` + `server.tomcat.internal-proxies` en `application.yaml`), que resuelve la IP real antes de que `LoginRateLimitFilter` vea el request — no confía en el header crudo del cliente. Ver `LoginRateLimitFilter.obtenerIpCliente()` y `collab/propuestas/2026-07-24-propuesta-fix-threat-model-2.2-v2-tomcat-native.md`.
 
 ### 2.3 Ausencia de unique constraint a nivel de base de datos para suscripción activa por usuario
 - **Severidad:** Alta
@@ -271,23 +278,16 @@ no aplica. **Cerrado, sin acción requerida.**
 producción automáticamente. No verificable si Railway usa un build
 alternativo que ignore esto, pero es el comportamiento por defecto.
 
-**§2.2 (X-Forwarded-For) — sigue genuinamente abierto.** Documentado
-explícitamente en comentario de código
-(`LoginRateLimitFilter.java:109-121`) como limitación conocida, sin fix
-aplicado. Requiere conocer el rango de IP del proxy de Railway para
-validar contra eso.
+**§2.2 (X-Forwarded-For) — CERRADO (2026-07-24).** Resuelto vía
+`RemoteIpValve` nativo de Tomcat, ver detalle en la sección 2.2 arriba.
 
-**§2.3 (unique constraint suscripción activa) — aplicado en dev,
-verificación en Railway (prod) pendiente.** No verificable desde esta
-sesión por falta de acceso a esa base de datos.
+**§2.3 (unique constraint suscripción activa) — CERRADO, verificado
+también en Railway (prod) el 2026-07-24.**
 
-**Hallazgo nuevo, no cubierto en este documento — 3 vulnerabilidades
-HIGH en dependencias del frontend.** `npm audit` en `gymflow-frontend`
-reporta HIGH en la cadena `next`/`postcss`/`sharp` (SSRF, DoS, XSS,
-lectura arbitraria de archivos vía sourceMappingURL). Fix disponible
-(`next@16.2.11`, bump de parche). No aplicado todavía — pendiente de
-decisión de William. Esto es supply-chain (relacionado con §4.3 de
-este documento), no un bug de código propio.
+**3 vulnerabilidades HIGH en dependencias del frontend — CERRADO
+(2026-07-23).** `next` bumpeado a `16.2.11` + `overrides` forzando
+`postcss@8.5.22`/`sharp@0.35.3` en `package.json`. Verificado de nuevo
+el 2026-07-27: `npm audit` da 0 vulnerabilidades.
 
 ## 6. Lo que este documento NO cubre (límites honestos del análisis)
 
@@ -347,13 +347,29 @@ Probado contra el backend real corriendo en local (`.\mvnw.cmd spring-boot:run`)
 - **2.7 (DoS/excepción sin manejar en JwtAuthFilter):** `GET /api/planes` con `Authorization: Bearer esto-no-es-un-jwt-valido` devuelve **403 Forbidden** limpio. Antes del fix esto hubiera propagado una excepción de JJWT sin capturar. Confirmado corregido en runtime.
 - Nota aparte: los stack traces de `AuthorizationDeniedException` visibles en el log con `SECURITY_LOG_LEVEL=TRACE` son el mecanismo interno normal de Spring Security (control de flujo vía excepciones), no relacionados con el bug corregido — no confundir con una regresión.
 
-### 7.3 Pendientes reales (requieren decisión de William o trabajo de infraestructura, no solo código)
+### 7.3 Pendientes reales (actualizado 2026-07-27)
 
-1. `requirepass` en Redis + no exponer el puerto al host (1.1) — **el más urgente, desbloquea 1.2 y reduce el riesgo real de 2.1**.
-2. ~~Aplicar `scripts/migrations/001_unique_suscripcion_activa.sql`~~ **HECHO en dev (2026-07-10)** — falta replicar en staging/prod cuando existan esos entornos.
-3. Confirmar dependencia a `spring-boot-health` antes de mergear PR #4 (1.3).
-4. Confirmar `DevTools` nunca activo en entornos compartidos (1.4).
-5. Paginación en endpoints de listado (3.3) — **HECHO (2026-07-11)**, aplicado desde propuesta de Codex, revisado por Claude.
-6. Password policy más allá de longitud (3.5) — **HECHO (2026-07-12)**: `@Size(min=12, max=128)` sin composición + `@NotCommonPassword` (lista offline chica), aplicado por Claude desde propuesta ya lista de Codex. Límite de tamaño de request body — **HECHO**.
-7. ~~Aplicar fix de Redis auth (1.1)~~ **HECHO (2026-07-11)** — `requirepass` + bind a 127.0.0.1, ver `collab/aplicado/2026-07-11-redis-hardening.md`. **Verificación en runtime pendiente.**
-8. ~~Decidir sobre remover RedisCacheConfig/@EnableCaching (1.2)~~ **HECHO (2026-07-11)** — removido, movido a `docs/codigo-removido/`. **Verificación en runtime pendiente.**
+Todos los ítems de código de esta lista están cerrados. Lo único que
+sigue genuinamente pendiente es una verificación que requiere acceso a
+la consola de Railway, no trabajo de código:
+
+1. **Confirmar en runtime de producción (Railway) que `requirepass` de
+   Redis (1.1) está efectivamente activo ahí.** En dev (`docker-compose.yml`)
+   está confirmado: `requirepass` + bind a `127.0.0.1`. No verificado en
+   prod por falta de acceso a esa consola desde las sesiones de agentes.
+
+Historial (todo lo demás, cerrado):
+- Redis auth (1.1) en dev — hecho 2026-07-11.
+- `RedisCacheConfig`/`@EnableCaching` removido (1.2) — hecho 2026-07-11.
+- Migración de índice único de suscripción activa (2.3) — hecho en dev
+  2026-07-10, verificado también en Railway (prod) 2026-07-24.
+- Migración a Spring Boot 4.1.0 con `spring-boot-health` presente (1.3) —
+  hecho, PR #10 mergeado; CVE-2026-40976 no aplica (fuera de rango +
+  `SecurityConfig` propio).
+- `DevTools` con `scope=runtime`/`optional=true` (1.4) — confirmado sin
+  acción adicional necesaria.
+- Paginación en listados (3.3) — hecho 2026-07-11.
+- Password policy (3.5) — hecho 2026-07-12.
+- X-Forwarded-For (2.2) — hecho 2026-07-24, ver sección 2.2 arriba.
+- npm audit HIGH (`next`/`postcss`/`sharp`) — hecho 2026-07-23, verificado
+  en 0 vulnerabilidades 2026-07-27.
