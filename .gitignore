@@ -34,3 +34,7 @@ build/
 
 ### Backups locales (contienen datos reales, nunca al repo) ###
 /backups/
+
+### env files (nunca commitear secretos reales) ###
+.env*
+!.env.example
