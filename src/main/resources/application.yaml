@@ -161,6 +161,36 @@ app:
   debug-headers:
     enabled: ${APP_DEBUG_HEADERS_ENABLED:false}
 
+  # Feature 1 del portafolio (chatbot de soporte, ver
+  # collab/propuestas/claude/features-portafolio.md). Placeholder de
+  # desarrollo SOLO válido para que el ApplicationContext levante en tests
+  # (este proyecto no tiene application-test.yaml ni perfil global de test,
+  # así que todo @SpringBootTest depende de que cada property tenga un
+  # default acá). No es una key real: cualquier llamada real con este valor
+  # devuelve 401/403, mapeado a 503 por GlobalExceptionHandler.
+  # En producción DEBE definirse la variable de la API key real del
+  # proveedor activo.
+  chat:
+    # anthropic | gemini. Gemini por ahora (2026-07-26, decisión de
+    # William): tier gratis real, sin tarjeta, mientras el proyecto no
+    # genera ingresos. Cambiar a "anthropic" es solo esta property — el
+    # código de ambos adaptadores ya está listo (ver client/).
+    provider: ${APP_CHAT_PROVIDER:gemini}
+    anthropic-api-key: ${ANTHROPIC_API_KEY:dev-only-placeholder-not-a-real-key}
+    base-url: ${ANTHROPIC_BASE_URL:https://api.anthropic.com}
+    # Haiku 4.5: modelo más barato/rápido de la generación actual, apropiado
+    # para respuestas cortas ancladas a un contexto ya armado (RAG simple),
+    # no para razonamiento complejo.
+    model: ${ANTHROPIC_CHAT_MODEL:claude-haiku-4-5-20251001}
+    max-tokens: ${ANTHROPIC_CHAT_MAX_TOKENS:512}
+    # Gemini (proveedor activo por defecto, ver "provider" arriba).
+    # Placeholder de dev igual que anthropic-api-key: no es una key real.
+    gemini-api-key: ${GEMINI_API_KEY:dev-only-placeholder-not-a-real-key}
+    base-url-gemini: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+    # Flash-Lite: el más económico dentro del tier gratis de Gemini.
+    # Suficiente para respuestas cortas ancladas a contexto ya armado.
+    model-gemini: ${GEMINI_CHAT_MODEL:gemini-3.1-flash-lite}
+
 logging:
   level:
     # En local, TRACE ayuda a depurar el filtro JWT/auth. En producción fijar
