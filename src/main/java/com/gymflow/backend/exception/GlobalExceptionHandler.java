@@ -1,5 +1,6 @@
 package com.gymflow.backend.exception;
 
+import com.gymflow.backend.client.ChatCompletionException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,6 +81,17 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleRedisDown(RedisConnectionFailureException ex) {
         log.error("Redis no disponible: {}", ex.getMessage());
         return build(HttpStatus.SERVICE_UNAVAILABLE, "Servicio temporalmente no disponible", null);
+    }
+
+    @ExceptionHandler(ChatCompletionException.class)
+    public ResponseEntity<Map<String, Object>> handleChatCompletionFailure(ChatCompletionException ex) {
+        // El proveedor LLM cayó o devolvió un error — no es culpa del
+        // usuario ni un bug nuestro, así que 503 (mismo criterio que
+        // handleRedisDown) en vez de 500. El detalle real queda solo en el
+        // log, nunca en la respuesta.
+        log.error("Fallo al llamar al proveedor de chat: {}", ex.getMessage());
+        return build(HttpStatus.SERVICE_UNAVAILABLE,
+                "El asistente no está disponible en este momento. Intenta de nuevo en un momento.", null);
     }
 
     @ExceptionHandler(RuntimeException.class)
