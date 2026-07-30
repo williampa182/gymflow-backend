@@ -1,4 +1,15 @@
 spring:
+  # Carga automática de .env en local — sin esto, .env.example era solo
+  # documentación: no existía ningún loader real y había que exportar cada
+  # variable a mano en la terminal (ver collab/aplicado/2026-07-28-*).
+  # "optional:" evita que falle si el archivo no existe (Railway/prod no lo
+  # tiene, usa env vars reales de la plataforma). El sufijo [.properties]
+  # es el truco documentado de Spring Boot para que trate un archivo sin
+  # extensión reconocida como formato .properties (KEY=VALUE), que es
+  # exactamente el formato de .env. Nativo desde Spring Boot 2.4, cero
+  # dependencias nuevas.
+  config:
+    import: "optional:file:.env[.properties]"
   application:
     name: gymflow-backend
 
