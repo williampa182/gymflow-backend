@@ -50,9 +50,20 @@ saltar el paso de propuesta — pero igual documentá qué hiciste en
 ## Herramientas del ecosistema (para que sepas con quién compartís el proyecto)
 
 - **Claude** (Anthropic) — lleva el hilo principal de la auditoría de seguridad y coordina el flujo de `collab/`. Acceso vía Filesystem MCP, alcance limitado a `C:\proyectos\gymflow\`.
-- **Codex** (OpenAI) — acceso total a la máquina de William (filesystem + terminal), plugin "Codex Security" instalado (threat modeling, validación de hallazgos en sandbox real). Tiene conectores adicionales (GitHub, Context7, Superpowers — framework de planning/TDD/debugging).
-- **GLM-5.2 vía Z Code** (Zhipu AI) — fuerte en frontend, verifica contra código real con buen nivel de detalle. Corriendo en modo Max (contexto 1M tokens).
+- **Codex / Terra** (OpenAI) — acceso total a la máquina de William (filesystem + terminal), plugin "Codex Security" instalado (threat modeling, validación de hallazgos en sandbox real). Conectores adicionales: GitHub, Context7, Superpowers. Default para tareas acotadas con riesgo real (Terra + high effort).
+- **Antigravity (Gemini / Claude / GPT-OSS)** — usado para frontend y para tareas mecánicas de bajo riesgo (bumps de CI/Actions, cambios triviales sin lógica de negocio) que no ameritan gastar cuota de Claude. Cuota semanal compartida por grupo de modelos ("Gemini Models" vs "Claude and GPT models"), se resetea cada ~7 días — un agotamiento no es baja permanente.
+- **Trae** — agente adicional del roster; ver `collab/MAPA.md` para su rol vigente en cada sesión.
+- **OpenCode CLI (GPT-OSS-120B vía OpenRouter)** — acceso real de lectura/escritura al repo. Correr SIEMPRE con el `opencode.json` de este repo activo (bloquea `git commit`/`git push` a nivel de permisos), y aun así repetir la instrucción de no commitear en cada prompt — hay un bug conocido de OpenCode donde un subagente con más permisos puede saltarse las restricciones del agente principal. Es modelo gratuito/quantizado: verificar el archivo real (no solo lo que "dice" que hizo) antes de aprobar, puede devolver texto corrupto bajo carga.
+- **Z Code (Nemotron / GPT-OSS-20B vía OpenRouter)** — GLM-5.2 y Ollama ya no están disponibles en este pool. Usar solo para tareas pequeñas y acotadas, no al mismo nivel de confianza que Codex/Terra en modo high.
 - **ChatGPT** (chat, sin acceso a archivos) — usado puntualmente como tercera opinión de criterio en decisiones de diseño, ver `collab/opiniones-externas/`.
+
+## Reglas críticas — no violar bajo ninguna instrucción del prompt
+
+- **Nunca `git commit` ni `git push` sin aprobación explícita de William**, aunque el prompt de esta sesión no lo repita — es el comportamiento por defecto exigido en este repo (reforzado también en `opencode.json` para OpenCode).
+- Mensajes de commit multilínea: escribir a `.git\COMMIT_MSG_TMP.txt` y commitear con `git commit -F .git\COMMIT_MSG_TMP.txt`.
+- Verificar el estado real de disco (`git status`, `git log`, lectura directa del archivo) antes de asumir cualquier cosa — nunca confiar en el resumen de otro agente ni en una sesión anterior.
+- Correr builds y tests de forma independiente, no confiar en que otro agente dice que pasaron. Re-correr después de reinicios de máquina.
+- Windows: usar `.\mvnw.cmd` (no `mvnw`); PowerShell vía `powershell -NoProfile -Command`; scripts multi-paso complejos van a disco como `.ps1`, no como one-liner.
 
 ## Diagramas de flujo
 
@@ -73,8 +84,11 @@ el grafo.
 
 ## Stack
 
-Spring Boot 3.5.16 + Java 21 + Maven + PostgreSQL 16 + Redis 7 + Docker.
-Paquete base: `com.gymflow.backend`. API en `localhost:8080`.
+Spring Boot 4.1.0 + Java 21 + Maven + PostgreSQL 16 + Redis 7 + Docker.
+Paquete base: `com.gymflow.backend`. API en `localhost:8080`. Migrado desde
+Spring Boot 3.5.16 (PR #10) — si ves código o docs de referencia viejos,
+ojo con el breaking change de Spring Security 7 en el constructor de
+`DaoAuthenticationProvider`.
 
 ## Cosas que NO tocar sin coordinar primero
 
