@@ -202,6 +202,31 @@ app:
     # Suficiente para respuestas cortas ancladas a contexto ya armado.
     model-gemini: ${GEMINI_CHAT_MODEL:gemini-3.1-flash-lite}
 
+  # Notificaciones de vencimiento de suscripción vía Resend (ver
+  # collab/propuestas/opencode/deepseek-v4-flash-free/2026-07-31-notificaciones-vencimiento-resend.md).
+  # Resend se integra por HTTP directo con RestClient (patrón client/, cero
+  # dependencias nuevas) — la key de dev es un placeholder igual que las del
+  # chat: cualquier llamada real con ese valor devuelve 401/403, mapeado a
+  # EmailEnvioException.
+  email:
+    resend-api-key: ${RESEND_API_KEY:dev-only-placeholder-not-a-real-key}
+    resend-base-url: ${RESEND_BASE_URL:https://api.resend.com}
+    # Remitente del email: en producción debe ser un dominio verificado en la
+    # cuenta de Resend (ej. "GymFlow <no-reply@midominio.com>").
+    from: ${EMAIL_FROM:no-reply@gymflow.com}
+    # Días de anticipación con los que se avisa el vencimiento (ventana
+    # abierta hoy..hoy+ventana, con tracking por notificado_en).
+    aviso-ventana-dias: ${EMAIL_AVISO_VENTANA_DIAS:7}
+    # Base URL pública del frontend para el CTA "Renovar ahora" — debe
+    # coincidir con NEXT_PUBLIC_APP_ORIGIN del frontend. El CTA completo se
+    # arma en NotificacionVencimientoService como base + /dashboard/suscripciones.
+    cta-base-url: ${EMAIL_CTA_BASE_URL:http://localhost:3000}
+    # Apaga el job programado (los tests @SpringBootTest lo fijan en false
+    # para que no corra scheduling).
+    aviso-enabled: ${EMAIL_AVISO_ENABLED:true}
+    # Cron del job diario (default: 09:00 hora local del servidor).
+    aviso-cron: "${EMAIL_AVISO_CRON:0 0 9 * * *}"
+
 logging:
   level:
     # En local, TRACE ayuda a depurar el filtro JWT/auth. En producción fijar

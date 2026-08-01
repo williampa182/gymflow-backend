@@ -41,6 +41,13 @@ public class Suscripcion {
     @Column(name = "creado_en")
     private LocalDateTime creadoEn;
 
+    // Tracking del aviso de vencimiento (ver scripts/migrations/
+    // 002_notificado_en_suscripciones.sql): se setea cuando se notifica el
+    // vencimiento al usuario y deja de ser null, para que el job diario no
+    // reenvíe el email a la misma suscripción.
+    @Column(name = "notificado_en")
+    private LocalDateTime notificadoEn;
+
     // Optimistic locking: protege contra el caso "dos requests modifican la
     // MISMA suscripción a la vez" (ej. dos admins cancelando/editando el
     // mismo registro en simultáneo). Hibernate incrementa esta columna en

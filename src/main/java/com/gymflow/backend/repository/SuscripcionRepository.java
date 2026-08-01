@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -38,4 +39,18 @@ public interface SuscripcionRepository extends JpaRepository<Suscripcion, Long> 
             """)
     List<IngresoPorTipoPlanProjection> ingresosEstimadosPorTipoPlan(
             @Param("estado") EstadoSuscripcion estado);
+
+    @Query("""
+            select s
+            from Suscripcion s
+            join s.usuario u
+            where s.estado = :estado
+              and s.fechaFin between :desde and :hasta
+              and s.notificadoEn is null
+              and u.activo = true
+            """)
+    List<Suscripcion> findPendientesAvisoVencimiento(
+            @Param("estado") EstadoSuscripcion estado,
+            @Param("desde") LocalDate desde,
+            @Param("hasta") LocalDate hasta);
 }

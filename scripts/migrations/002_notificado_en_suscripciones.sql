@@ -1,0 +1,28 @@
+-- 002_notificado_en_suscripciones.sql
+--
+-- Por qué: el job de aviso de vencimiento (NotificacionVencimientoService,
+-- diario por cron) necesita recordar a qué suscripciones ya se les avisó,
+-- para no reenviar el email en cada corrida. La ventana de aviso es
+-- [hoy, hoy + EMAIL_AVISO_VENTANA_DIAS] y una suscripción solo se notifica
+-- mientras notificado_en IS NULL.
+--
+-- Alternativas descartadas (deliberadamente):
+--  - One-shot (notificar solo el día exacto fecha_fin - X): si el job se
+--    cae ese día, el aviso se pierde para siempre.
+--  - Tabla de envíos aparte: el flag en la fila alcanza y simplifica el
+--    reintento (mismo criterio de selección, sin joins nuevos).
+--
+-- La columna es nullable a propósito: las filas existentes (y las nuevas que
+-- se creen) arrancan sin notificar y entran en la ventana cuando corresponde.
+--
+-- CÓMO APLICAR (no se corre solo, hacerlo a mano y con cuidado, igual que 001):
+--   1. Backup antes de correr esto en cualquier entorno con datos reales
+--      (ver docs/BACKUP_RUNBOOK.md).
+--   2. En dev, Hibernate con ddl-auto=update la crea solo; este script es
+--      para producción (donde DDL_AUTO=validate exige la columna porque la
+--      entidad la declara). Correr contra dev primero.
+--   3. Verificación rápida post-aplicación: la columna debe existir y no
+--      debería tener constraint NOT NULL (es nullable):
+--        SELECT column_name, is_nullable FROM information_schema.columns
+--        WHERE table_name = 'suscripciones' AND column_name = 'notificado_en';
+ALTER TABLE suscripciones ADD COLUMN IF NOT EXISTS notificado_en timestamp;
