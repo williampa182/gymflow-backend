@@ -9,6 +9,7 @@ import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -92,6 +93,17 @@ public class GlobalExceptionHandler {
         log.error("Fallo al llamar al proveedor de chat: {}", ex.getMessage());
         return build(HttpStatus.SERVICE_UNAVAILABLE,
                 "El asistente no está disponible en este momento. Intenta de nuevo en un momento.", null);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex) {
+        // @PreAuthorize falla (ej. CLIENTE llamando a un endpoint de ADMIN).
+        // AccessDeniedException extiende RuntimeException, así que sin este
+        // handler caía en handleGenericRuntime -> inferirStatus no reconocía
+        // el mensaje -> 500 "Error interno inesperado" en vez de 403, y se
+        // logueaba como error real en cada intento denegado (ver
+        // collab/aplicado/2026-08-01-fix-access-denied-403.md).
+        return build(HttpStatus.FORBIDDEN, "No tenés permisos para realizar esta acción", null);
     }
 
     @ExceptionHandler(RuntimeException.class)
