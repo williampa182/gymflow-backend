@@ -11,27 +11,21 @@
 > reales de usuarios (passwords, emails), no alcanzar un estado teórico de
 > cero riesgo que no existe en software real.
 
----
-
-> **Nota de vigencia (2026-07-27)**: la sección 5 (tabla de priorización) y
-> las secciones 1-4 de abajo reflejan el estado ORIGINAL del análisis
-> (2026-07-09/10). El estado REAL actualizado está en la sección 7
-> ("Auditoría de código real"). Resumen honesto y verificado contra código
-> real en esta fecha: **no queda ningún hallazgo de código abierto en este
-> documento.** §2.2 (X-Forwarded-For) se cerró el 2026-07-24 vía
-> `RemoteIpValve` nativo de Tomcat (ver `LoginRateLimitFilter.java` y
-> `collab/propuestas/2026-07-24-propuesta-fix-threat-model-2.2-v2-tomcat-native.md`).
-> §2.3 (índice único de suscripción activa) se verificó cerrado también en
-> Railway (prod) el mismo día. Las 3 vulnerabilidades HIGH de npm
-> (`next`/`postcss`/`sharp`, hallazgo de la sección 7.6) están resueltas:
-> `npm audit` da 0 vulnerabilidades (verificado 2026-07-27). §1.3
-> (CVE-2026-40976) se verificó como NO aplicable — Boot 4.1.0 ya está fuera
-> del rango afectado (4.0.0-4.0.5) y además el proyecto tiene
-> `SecurityConfig` propio. Lo único que sigue sin verificación directa
-> (no por falta de fix, sino porque requiere acceso a la consola de
-> Railway que esta sesión no tiene) es confirmar en runtime de producción
-> que `requirepass` de Redis (§1.1) está efectivamente activo ahí — en
-> dev/`docker-compose.yml` está confirmado.
+> **Nota de vigencia (2026-08-01)**: las secciones 1-5 de abajo son el mapa
+> de amenazas ORIGINAL del análisis (2026-07-09/10) con su estado actualizado
+> inline en cada hallazgo. **No queda ningún hallazgo de código abierto.**
+> El detalle de cómo se auditó y corrigió cada cosa está en
+> [`SECURITY_AUDIT_LOG.md`](SECURITY_AUDIT_LOG.md); el resumen ejecutivo con
+> la tabla completa de hallazgos→estado está en
+> [`SECURITY_CHANGELOG.md`](SECURITY_CHANGELOG.md). Resumen honesto:
+>
+> - §1.1 (Redis auth): resuelto en dev (07-11); única verificación pendiente
+>   es confirmar `requirepass` activo en Railway prod (requiere consola).
+> - §1.2: degradado a hardening preventivo y resuelto (cache removido).
+> - §1.3 (CVE-2026-40976): no aplica (Boot 4.1.0 + `SecurityConfig` propio).
+> - §2.2 (X-Forwarded-For): cerrado 07-24 vía `RemoteIpValve` nativo.
+> - §2.3 (índice único): cerrado en dev y Railway prod (07-24).
+> - npm audit: 0 vulnerabilidades (verificado 08-01).
 
 ## Cómo leer este documento
 
@@ -49,30 +43,29 @@ La sección 8 (`ARCHITECTURE.md`) del proyecto ya documenta el porqué de varias
 
 ### 1.1 Redis sin autenticación (`requirepass` no configurado)
 - **Severidad:** Crítica
-- **Estado:** Sin confirmar — pendiente de verificar en `docker-compose.yml` y config de Railway.
+- **Estado:** RESUELTO en dev (2026-07-11) — `requirepass` + bind a `127.0.0.1` en `docker-compose.yml`, password en `application.yaml`. **Pendiente de verificación en Railway (prod)** — requiere consola de la plataforma.
 - **Impacto:** Es la raíz de la que cuelgan varios otros hallazgos de este documento (1.2, 3.1, 4.2). Sin autenticación, cualquiera con acceso de red al puerto 6379 puede leer/escribir/borrar todo el contenido de Redis sin restricción.
 - **Explotación:** Si el puerto queda expuesto (mala segmentación de red en Railway, docker mal configurado), conexión directa con `redis-cli` sin credenciales.
 - **Mitigación:** `requirepass` obligatorio en dev y prod (no "para cuando se despliegue"). Confirmar que Redis en Railway solo escucha en red interna, nunca expuesto a internet.
 
 ### 1.2 Deserialización insegura vía `GenericJackson2JsonRedisSerializer` → RCE
-- **Severidad:** ~~Crítica~~ **DEGRADADA — ver corrección en sección 7.5 (Codex Security, 2026-07-11): needs_review/hardening preventivo, RCE NO demostrado en el checkout actual**
-- **Estado:** Sin confirmar — depende de 1.1 para ser explotable.
-- **Impacto:** El serializer de caché incluye metadata de tipo (`@class`) en el JSON almacenado. Si un atacante puede escribir en Redis (ver 1.1), puede inyectar una entrada de caché con un `@class` apuntando a una gadget class del classpath, logrando **ejecución remota de código** cuando el backend deserializa esa entrada al leer el caché de planes.
-- **Explotación:** Requiere 1.1 resuelto en contra (Redis escribible) + una gadget class presente en el classpath (común en proyectos con muchas dependencias Jackson/Spring).
-- **Mitigación:** Resolver 1.1 primero (es prerequisito). Adicionalmente, considerar un `ObjectMapper` con `PolymorphicTypeValidator` restrictivo específico para el serializer de Redis, en vez de confiar en el default.
+- **Severidad:** ~~Crítica~~ **DEGRADADA y RESUELTA — ver corrección en el audit log (2026-07-11): needs_review/hardening preventivo, RCE NO demostrado en el checkout actual**
+- **Estado:** RESUELTO — `RedisCacheConfig`/`@EnableCaching` removidos (2026-07-11); no hay ningún `@Cacheable` activo ni sink de deserialización.
+- **Impacto:** El serializer de caché incluía metadata de tipo (`@class`) en el JSON almacenado. Si un atacante podía escribir en Redis (ver 1.1), podía inyectar una entrada de caché con un `@class` apuntando a una gadget class del classpath, logrando **ejecución remota de código** al deserializar.
+- **Explotación:** Requería 1.1 resuelto en contra (Redis escribible) + una gadget class presente en el classpath.
+- **Mitigación:** Aplicada. Si algún día se reintroduce caché con Redis, revisar el modelo de serialización con un `ObjectMapper` con `PolymorphicTypeValidator` restrictivo.
 
 ### 1.3 CVE-2026-40976 — Spring Boot 4.0.0–4.0.5, bypass de autorización con Actuator
 - **Severidad:** Crítica (CVSS 9.1)
-- **Estado:** Confirmado como riesgo futuro — aplica directamente a la migración pendiente (PR #4, Dependabot, Spring Boot 3.5.16 → 4.1.0).
-- **Impacto:** En apps servlet-based que usan el filter chain por defecto de Spring Security, dependen de `spring-boot-actuator-autoconfigure` y NO dependen de `spring-boot-health`, la configuración de seguridad por defecto falla en aplicar autorización — puede exponer **todos los endpoints, incluidos los de ADMIN**, sin autenticación.
-- **Por qué aplica a GymFlow específicamente:** el proyecto es servlet-based, usa el filter chain de Spring Security, y agregó Actuator en la sesión del 2026-07-07 — cumple 3 de las 4 condiciones de la CVE. Falta confirmar la cuarta (dependencia a `spring-boot-health`).
-- **Mitigación:** Antes de mergear PR #4, confirmar explícitamente la dependencia a `spring-boot-health` o revisar el filter chain manualmente contra el advisory oficial de Spring (`spring.io/security/cve-2026-40976`). No mergear el PR sin este chequeo, sin importar que la CI pase en verde — la CI no testea esta condición.
+- **Estado:** **NO APLICA (verificado 2026-07-23).** Rango afectado: Boot 4.0.0–4.0.5, corregido en 4.0.6+. GymFlow está en **4.1.0** (fuera de rango) y además tiene `SecurityConfig` propio (la CVE solo aplica con el filter chain por default).
+- **Impacto:** En apps servlet-based con el filter chain por defecto y Actuator, la configuración de seguridad por defecto falla en aplicar autorización — podía exponer endpoints sin autenticación.
+- **Mitigación:** Ninguna requerida (versión parchada + config propia). Si se vuelve a migrar de Boot, verificar el rango del advisory antes.
 
 ### 1.4 CVE-2026-40972 — timing attack contra DevTools remote secret (Boot, misma migración)
 - **Severidad:** Alta (CVSS 7.5)
-- **Estado:** Sin confirmar — depende de si DevTools está activo en algún entorno compartido.
-- **Impacto:** Atacante en la misma red puede explotar timing contra el remote secret de DevTools, con potencial de RCE en casos extremos.
-- **Mitigación:** Confirmar que DevTools nunca está activo fuera de la máquina de desarrollo local, especialmente no en contenedores compartidos.
+- **Estado:** No aplica — `spring-boot-devtools` con `scope=runtime` + `optional=true`, excluido del JAR de producción automáticamente.
+- **Impacto:** Atacante en la misma red podía explotar timing contra el remote secret de DevTools, con potencial de RCE en casos extremos.
+- **Mitigación:** Confirmar que DevTools nunca está activo fuera de la máquina de desarrollo local (config estándar ya lo garantiza).
 
 ---
 
@@ -80,45 +73,45 @@ La sección 8 (`ARCHITECTURE.md`) del proyecto ya documenta el porqué de varias
 
 ### 2.1 Fail-closed en `LoginRateLimitFilter` depende de que Redis esté protegido (ver 1.1)
 - **Severidad:** Alta
-- **Estado:** Decisión de diseño tomada (fail-closed) — condicionada a resolver 1.1 primero.
-- **Impacto:** Con la política fail-closed decidida, si un atacante logra que Redis deje de responder (trivial si 1.1 no está resuelto), tumba el login de **todo el sistema** para todos los usuarios.
-- **Mitigación:** No implementar fail-closed hasta confirmar 1.1. El orden importa: fail-closed sin Redis protegido convierte una optimización en un botón de apagado del sistema.
+- **Estado:** Decisión de diseño tomada (fail-closed) — con 1.1 resuelto, el escenario original quedó mitigado. Un fallo de Redis responde 503 explícito (no crash accidental).
+- **Impacto:** Con la política fail-closed, si un atacante logra que Redis deje de responder, tumba el login de **todo el sistema**. El 503 explícito hace el estado distinguible del 429.
+- **Mitigación:** Aplicada (manejo de `RedisConnectionFailureException` en `LoginRateLimitFilter`). Mantener Redis protegido (1.1).
 
 ### 2.2 `X-Forwarded-For` sin validar contra proxy confiable
 - **Severidad:** Alta
 - **Estado:** **RESUELTO (2026-07-24).**
-- **Impacto:** Si el filtro de rate limiting confía ciegamente en el header `X-Forwarded-For` sin validar que proviene realmente del proxy de Railway, un atacante puede mandar un valor distinto en cada request y hacer que cada intento cuente como una IP diferente — bypass total del rate limit de login sin tocar Redis.
-- **Mitigación:** ~~Validar que el request entra desde la IP del proxy conocido de Railway antes de confiar en `X-Forwarded-For`; si no, usar `getRemoteAddr()` directo.~~ **Aplicado** vía `RemoteIpValve` nativo de Tomcat (`server.forward-headers-strategy: native` + `server.tomcat.internal-proxies` en `application.yaml`), que resuelve la IP real antes de que `LoginRateLimitFilter` vea el request — no confía en el header crudo del cliente. Ver `LoginRateLimitFilter.obtenerIpCliente()` y `collab/propuestas/2026-07-24-propuesta-fix-threat-model-2.2-v2-tomcat-native.md`.
+- **Impacto:** Si el filtro de rate limiting confiaba ciegamente en el header `X-Forwarded-For`, un atacante podía mandar un valor distinto en cada request y hacer que cada intento cuente como una IP diferente — bypass total del rate limit de login.
+- **Mitigación:** **Aplicado** vía `RemoteIpValve` nativo de Tomcat (`server.forward-headers-strategy: native` + `server.tomcat.internal-proxies` en `application.yaml`): resuelve la IP real leyendo `X-Forwarded-For` de derecha a izquierda y descartando los saltos internos (verificada la posición correcta contra soporte de Railway). `LoginRateLimitFilter.obtenerIpCliente()` ve la IP ya resuelta.
 
 ### 2.3 Ausencia de unique constraint a nivel de base de datos para suscripción activa por usuario
 - **Severidad:** Alta
-- **Estado:** Sin confirmar — requiere revisar `SuscripcionService.crear()` y el esquema de `suscripciones`.
-- **Impacto:** Si el chequeo "¿ya tiene una suscripción activa?" y el `save()` no son atómicos (TOCTOU), requests concurrentes pueden crear múltiples suscripciones activas para el mismo usuario. Esto es un bug de integridad de negocio, no de concurrencia de updates — el `@Version` planeado para Fase 5 NO lo resuelve.
-- **Mitigación:** Constraint única a nivel de Postgres (ej. índice parcial único `WHERE estado = 'ACTIVA'`), no solo chequeo en Java.
+- **Estado:** **RESUELTO (dev 2026-07-10, Railway prod verificado 2026-07-24).**
+- **Impacto:** Si el chequeo "¿ya tiene una suscripción activa?" y el `save()` no eran atómicos (TOCTOU), requests concurrentes podían crear múltiples suscripciones activas para el mismo usuario.
+- **Mitigación:** Constraint a nivel de Postgres — índice único parcial `uq_suscripcion_activa_por_usuario` (`scripts/migrations/001_unique_suscripcion_activa.sql`) + `@Version` (optimistic locking) cubriendo ambas mitades de la carrera.
 
 ### 2.4 JWT sin revocación — `activo=false` no invalida tokens ya emitidos
 - **Severidad:** Alta
-- **Estado:** Confirmado como limitación conocida (documentada en `ARCHITECTURE.md` §8).
-- **Impacto:** Desactivar un usuario comprometido no tiene efecto hasta que su JWT expire (hasta 24h). Lo mismo aplica a "logout" — solo limpia cookies del navegador, el token sigue siendo válido en el backend.
-- **Mitigación (proporcional al proyecto, no "nivel banco"):** revalidar `activo` contra la base en `JwtAuthFilter` en cada request (costo: una consulta extra, mitigable con cache corto), o reducir `JWT_EXPIRATION` significativamente y aceptar la ventana de riesgo como trade-off documentado.
+- **Estado:** Aceptado como limitación conocida (documentada en `ARCHITECTURE.md` §8).
+- **Impacto:** Desactivar un usuario comprometido no tiene efecto hasta que su JWT expire (hasta 24h). "Logout" solo limpia cookies; el token sigue válido en el backend.
+- **Mitigación (proporcional al proyecto, no "nivel banco"):** revalidar `activo` contra la base en `JwtAuthFilter` en cada request (costo: una consulta extra, mitigable con cache corto), o reducir `JWT_EXPIRATION` y aceptar la ventana como trade-off documentado.
 
 ### 2.5 CSRF vía la cookie httpOnly + proxy genérico de Next.js
 - **Severidad:** Alta
-- **Estado:** Sin confirmar — depende de si el proxy `[...path]/route.ts` valida origen de la request.
-- **Impacto:** La cookie `token` se manda automáticamente en cada request al dominio. Con `sameSite: lax`, las mutaciones vía GET (si existieran) o escenarios futuros que requieran relajar la política quedan expuestos a CSRF clásico. El proxy genérico es el punto más goloso porque convierte la cookie en un `Authorization` header válido hacia el backend real sin fricción adicional.
-- **Mitigación:** Confirmar que ninguna mutación de estado ocurre vía GET. Agregar validación de origen (header custom tipo `X-Requested-With`, o token CSRF double-submit) en el proxy antes de reenviar al backend.
+- **Estado:** **RESUELTO (defensa en profundidad).**
+- **Impacto:** La cookie `token` se manda automáticamente en cada request al dominio; el proxy convertía la cookie en `Authorization` header válido.
+- **Mitigación:** **Aplicada.** El proxy `[...path]/route.ts` valida `Origin` contra el origen esperado (`NEXT_PUBLIC_APP_ORIGIN`) en todo método que muta estado. Backend con CSRF deshabilitado por diseño (API stateless con JWT). Setear `NEXT_PUBLIC_APP_ORIGIN` en Railway (checklist de deploy).
 
 ### 2.6 SSRF / passthrough no sanitizado en el proxy `[...path]/route.ts`
 - **Severidad:** Alta
-- **Estado:** Sin confirmar.
-- **Impacto:** Si el proxy toma el `path` del request entrante sin validarlo contra una lista de rutas permitidas del backend, puede usarse como puente hacia rutas internas no destinadas a exposición pública, especialmente peligroso si `BACKEND_URL` apunta a una red privada de Railway.
-- **Mitigación:** Whitelist explícita de rutas permitidas en el proxy, o al menos validación de que el path resuelve dentro del namespace esperado de la API.
+- **Estado:** **RESUELTO.**
+- **Impacto:** `new URL()` normaliza `..`, permitiendo que el path escape del prefijo `/api/` (ej. `/api/backend/../actuator/prometheus`).
+- **Mitigación:** **Aplicada.** `esPathSeguro()` rechaza segmentos `.`, `..`, vacíos, o con `/`/`\` antes de construir la URL destino.
 
 ### 2.7 DoS de parsing JWT sin autenticación previa (Billion Hashes / Compression DoS)
 - **Severidad:** Alta
-- **Estado:** Sin confirmar.
-- **Impacto:** Investigación reciente de fuzzing sobre JJWT (la librería usada en GymFlow) muestra que tokens maliciosamente construidos pueden forzar cantidades desproporcionadas de operaciones de hash o descompresión, consumiendo CPU/memoria del servidor sin necesidad de romper la firma ni estar autenticado.
-- **Mitigación:** Chequeo barato de estructura (tres segmentos, tamaño máximo razonable, algoritmo declarado) antes de invocar el parser completo de JJWT.
+- **Estado:** **RESUELTO.**
+- **Impacto:** Tokens malformados forzaban el parser de JJWT completo con excepción sin manejar en cada request.
+- **Mitigación:** **Aplicada.** Try/catch alrededor del parseo (`JwtException`, `IllegalArgumentException`, `UsernameNotFoundException`) + límite de tamaño (2048 chars) antes de invocar el parser.
 
 ---
 
@@ -126,45 +119,41 @@ La sección 8 (`ARCHITECTURE.md`) del proyecto ya documenta el porqué de varias
 
 ### 3.1 Enumeración de usuarios vía mensajes de error o timing en login/registro
 - **Severidad:** Media
-- **Estado:** Sin confirmar.
-- **Impacto:** Si `AuthService` distingue "usuario no encontrado" de "password incorrecta" (por mensaje o por tiempo de respuesta, ya que BCrypt agrega latencia medible solo cuando el usuario existe), un atacante puede enumerar cuentas válidas antes de intentar brute-force dirigido.
-- **Mitigación:** Mensaje idéntico y tiempo de respuesta constante independientemente de si el email existe (ejecutar un BCrypt "dummy" cuando el usuario no existe, para igualar timing).
+- **Estado:** **RESUELTO.**
+- **Impacto:** Si `AuthService` distingue "usuario no encontrado" de "password incorrecta" (por mensaje o por tiempo, ya que BCrypt agrega latencia medible solo cuando el usuario existe), un atacante puede enumerar cuentas válidas.
+- **Mitigación:** **Aplicada (Fix A + Fix B, 2026-07-19).** Mensaje idéntico en login; `TimingSafeAuthenticationProvider` ejecuta BCrypt dummy cuando el usuario no existe; rehash automático de hashes con cost desactualizado en login (cerró el canal que los hashes viejos a cost 10 reabrían). Registro con `reveal-email-on-register=false` por default (decisión documentada 07-16).
 
 ### 3.2 Mass assignment vía DTOs sin whitelist explícita de campos
 - **Severidad:** Media
-- **Estado:** Sin confirmar — requiere revisar `PlanRequestDTO` y `SuscripcionRequestDTO`.
-- **Impacto:** Si el binding de JSON a DTO no excluye explícitamente campos como `id`, `activo`, `creadoEn`, `fechaFin`, un cliente puede intentar sobrescribirlos aunque la lógica de negocio no lo espere.
-- **Mitigación:** Confirmar que cada DTO de request solo declara los campos que el cliente debería poder setear.
+- **Estado:** **Auditado y cubierto por test de regresión (2026-07-25).**
+- **Impacto:** Si el binding de JSON a DTO no excluía explícitamente campos como `id`, `activo`, `creadoEn`, `fechaFin`, un cliente podía intentar sobrescribirlos.
+- **Mitigación:** DTOs de request con whitelist explícita; test `AuthRegisterPrivilegeEscalationRegressionTest` + cobertura de mass assignment.
 
 ### 3.3 Endpoints sin paginación — resource exhaustion y scraping
 - **Severidad:** Media
-- **Estado:** Confirmado — ningún endpoint de listado (`/api/planes`, `/api/usuarios`, `/api/suscripciones`) tiene paginación documentada.
-- **Impacto:** Cada request devuelve el dataset completo; costo de serialización crece con los datos, y permite scraping completo en una sola llamada si el rol lo permite.
-- **Mitigación:** Paginación (`Pageable` de Spring Data) en todos los endpoints de listado.
+- **Estado:** **RESUELTO (2026-07-11).**
+- **Mitigación:** `Pageable` en todos los endpoints de listado (`planes`, `usuarios`, `suscripciones`, por usuario).
 
 ### 3.4 Sin límite de tamaño de request body
 - **Severidad:** Media
-- **Estado:** Sin confirmar.
-- **Impacto:** Sin `server.max-http-request-header-size` o límite equivalente configurado, un POST con payload de varios MB fuerza parseo costoso antes de cualquier validación de negocio.
-- **Mitigación:** Configurar límite explícito de tamaño de body en Tomcat/Spring.
+- **Estado:** **RESUELTO (2026-07-11).**
+- **Mitigación:** `max-http-request-header-size` (8KB), `max-http-form-post-size`/`max-swallow-size` (2MB) en `application.yaml`. Nota: no hay límite duro para bodies JSON grandes antes del parseo — documentado en el yaml como límite conocido.
 
 ### 3.5 Registro sin política de password ni control anti-bot
 - **Severidad:** Media
-- **Estado:** Sin confirmar.
-- **Impacto:** Sin validación de fortaleza de contraseña ni CAPTCHA/rate limit dedicado en `/api/auth/register`, es trivial automatizar creación masiva de cuentas con passwords débiles — munición para credential stuffing y ruido en la base de datos.
-- **Mitigación:** Validación mínima de longitud/complejidad de password en el DTO de registro. Considerar rate limiting específico (ya existe el mecanismo, extenderlo a `/register`).
+- **Estado:** **RESUELTO (2026-07-12).**
+- **Mitigación:** `RegisterRequest` con `@Size(min=12,max=128)` + `@NotCommonPassword` (lista offline; decisión NIST 800-63B tras tres opiniones). `/api/auth/register` cubierto por el rate limit compartido (10 intentos/min por IP, key separada de login).
 
 ### 3.6 Fingerprinting vía headers de servidor y páginas de error
 - **Severidad:** Media
-- **Estado:** Sin confirmar.
-- **Impacto:** Header `Server` de Tomcat expuesto, o Whitelabel Error Page con stack trace completo si el perfil `dev` queda activo accidentalmente en producción, regalan versión exacta del stack — acelera la explotabilidad de CVEs conocidas del stack (incluida 1.3).
-- **Mitigación:** Confirmar `SPRING_PROFILES_ACTIVE=prod` en Railway (ya está en el checklist de deploy de `ARCHITECTURE.md` §7); deshabilitar/personalizar el header `Server`.
+- **Estado:** **RESUELTO (2026-07-11).**
+- **Mitigación:** `include-stacktrace: never`, `server-header: ""`, whitelabel deshabilitado — explícito independientemente del perfil activo. Setear `SPRING_PROFILES_ACTIVE=prod` en Railway (checklist).
 
 ### 3.7 Falta de headers de seguridad HTTP (CSP, X-Frame-Options, HSTS)
 - **Severidad:** Media
-- **Estado:** Sin confirmar.
-- **Impacto:** Sin `X-Frame-Options`/CSP `frame-ancestors`, el frontend es embebible en iframe ajeno (clickjacking). Sin HSTS, la primera conexión de cada usuario es vulnerable a downgrade de HTTPS a HTTP en redes no confiables.
-- **Mitigación:** Configurar headers en `next.config.js` (frontend) y `HeaderWriterFilter` (backend, ya presente en la cadena de Spring Security — falta configurar los headers específicos).
+- **Estado:** **RESUELTO (frontend, con test de regresión 07-25). Mejora pendiente opcional: CSP completa.**
+- **Impacto:** Sin `X-Frame-Options`/CSP, el frontend era embebible en iframe ajeno (clickjacking). Sin HSTS, la primera conexión de cada usuario es vulnerable a downgrade.
+- **Mitigación:** **Aplicada** en `next.config.ts`: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, HSTS (2 años), CSP con `frame-ancestors 'none'`. **Diferido (M2, 2026-08-01):** ampliar CSP con `script-src`/`object-src`/`base-uri` vía nonce — requiere testeo real con los scripts inline de Next; candidato a mejora futura del portafolio.
 
 ---
 
@@ -172,31 +161,36 @@ La sección 8 (`ARCHITECTURE.md`) del proyecto ya documenta el porqué de varias
 
 ### 4.1 `BCrypt` con cost factor por defecto sin verificar
 - **Severidad:** Baja individualmente, alta en combinación con una filtración de datos
-- **Mitigación:** Confirmar cost factor ≥ 12 explícito en la configuración de `PasswordEncoder`.
+- **Estado:** **RESUELTO.** `BCRYPT_STRENGTH = 12` explícito en `SecurityConfig` (2026-07-11), con rehash automático en login para hashes viejos (evita reabrir el canal de timing del Fix B).
 
 ### 4.2 Log injection vía `X-Request-ID` si se acepta del cliente sin sanitizar
 - **Severidad:** Baja
-- **Mitigación:** Confirmar que `CorrelationIdFilter` genera el ID server-side siempre, o sanitiza el header entrante si lo reutiliza.
+- **Estado:** **RESUELTO.** `CorrelationIdFilter` gestiona el header con sanitización (2026-07-11).
 
 ### 4.3 Supply chain — actualizaciones de Dependabot mergeadas sin revisión de changelog
 - **Severidad:** Baja (mitigado parcialmente por buena práctica ya existente de pausar PRs riesgosos)
-- **Mitigación:** Revisar changelog real, no solo confiar en que la CI pase, incluso en updates menores.
+- **Estado:** Proceso vigente — revisar changelog real antes de mergear, incluso en updates menores (regla reforzada tras el incidente del PR de Boot 4).
 
 ### 4.4 GitHub Actions — workflows con acceso a `PROD_DATABASE_URL`
 - **Severidad:** Baja mientras el repo sea privado; sube a Media/Alta si el repo se hace público
-- **Mitigación:** Checklist previo a hacer el repo público: revisar triggers de cada workflow (`pull_request` vs `pull_request_target`) y qué secrets tiene disponibles cada uno.
+- **Estado:** Checklist pendiente previo a hacer el repo público: revisar triggers de cada workflow (`pull_request` vs `pull_request_target`) y qué secrets tiene disponibles cada uno.
 
 ### 4.5 Credenciales de Docker Compose hardcodeadas en el repo
 - **Severidad:** Baja (son credenciales de dev sin valor real)
-- **Mitigación:** Comentario explícito en el archivo o separación clara del compose de producción para evitar repetir el incidente del JWT secret purgado.
+- **Estado:** **Documentado** — comentario "DEV ONLY" explícito en `docker-compose.yml` (2026-07-11) para evitar repetir el incidente del JWT secret purgado.
 
 ### 4.6 Contenedor backend potencialmente corriendo como root
 - **Severidad:** ~~Baja individualmente, multiplica el daño de 1.2 si se combina~~ **RESUELTO (2026-07-13)**
-- **Mitigación:** ~~`USER` no-root explícito en el Dockerfile.~~ **Aplicado.** No existía `Dockerfile` propio (por eso no aplicaba antes). Ahora existe, con usuario `gymflow` sin privilegios desde el diseño inicial, no como parche posterior. Verificado en runtime: build exitoso + contenedor real respondiendo `actuator/health` con `status: UP`. Ver `collab/aplicado/2026-07-13-dockerfile-backend.md`.
+- **Mitigación:** Dockerfile propio con usuario `gymflow` no-root desde el diseño inicial, verificado en runtime (`actuator/health` respondiendo dentro del contenedor).
 
 ---
 
 ## 5. Priorización sugerida (severidad × esfuerzo de explotación)
+
+> Tabla ORIGINAL del análisis (2026-07-09/10), conservada como referencia
+> histórica del orden en que se trabajó. Estado real actual: ver tabla del
+> [`SECURITY_CHANGELOG.md`](SECURITY_CHANGELOG.md) — todo lo de código está
+> cerrado.
 
 | # | Hallazgo | Severidad | Esfuerzo de explotación | Orden sugerido |
 |---|---|---|---|---|
@@ -215,161 +209,22 @@ La sección 8 (`ARCHITECTURE.md`) del proyecto ya documenta el porqué de varias
 
 ---
 
-### 7.5 Corrección importante — Codex Security, validación en sandbox (2026-07-11)
-
-> Ver `collab/propuestas/codex/codex-security-triage-redis-1.1-1.2.md` para el
-> detalle completo con evidencia y `collab/propuestas/codex/1.1-1.2-redis-hardening-propuesta.md`
-> para la propuesta de fix. Resumen honesto de lo que cambia:
-
-**1.1 (Redis sin auth): CONFIRMADO con evidencia de runtime real**, no solo
-lectura de config. Codex levantó Redis con el `docker-compose.yml` actual y
-confirmó con `redis-cli PING/SET/GET` que acepta comandos sin AUTH, y que
-Docker publica el puerto en `0.0.0.0:6379` (todas las interfaces), no solo
-loopback — peor de lo que teníamos documentado. Propuesta de fix lista,
-pendiente de aplicar.
-
-**1.2 (deserialización → RCE): la severidad Crítica estaba sobrestimada.**
-Dos cosas que se nos escaparon a Claude y a William:
-1. Un harness Java real probó que, con el constructor actual
-   (`new GenericJackson2JsonRedisSerializer(objectMapper)`, sin
-   `setDefaultTyping`), el campo `@class` de un payload NO se interpreta como
-   type hint ejecutable — se deserializa como `LinkedHashMap` normal, dato
-   inerte. La cadena de RCE documentada originalmente asumía default typing
-   activo, que no está activo con esta config específica.
-2. Más importante todavía: cuando se aplicó la propuesta 3.3 (paginación),
-   se sacó el `@Cacheable` de `PlanService.listar()` como parte de ese mismo
-   cambio. Sin ningún `@Cacheable` activo en el proyecto, **no hay ningún
-   punto donde el backend lea valores de Redis como caché y los deserialice**
-   — el sink que la cadena de ataque necesitaba ya no existe en el código
-   actual. Ninguno había notado esta conexión entre el trabajo de 3.3 y el
-   estado de 1.2.
-
-**Reclasificación honesta:** 1.2 pasa de "Crítica, confirmada en teoría" a
-"needs_review / hardening preventivo" — el riesgo real hoy es que alguien
-reintroduzca `@Cacheable` en el futuro sin revisar el modelo de serialización,
-no una vulnerabilidad activa explotable en el checkout actual. Propuesta de
-Codex: remover `RedisCacheConfig` y `@EnableCaching` por completo mientras no
-haya cache activo (superficie muerta = riesgo futuro innecesario), conservando
-Redis para el rate limiting que sí lo usa. Pendiente de decisión de William.
-
-Esto quedó documentado en el propio JSON de salida de Codex Security con
-formato `triage-finding/v0`, incluyendo cadena de razonamiento, evidencia,
-y contraevidencia — exactamente el tipo de segunda opinión con capacidad de
-validación en sandbox que ni Claude leyendo código ni William podían hacer.
-
-### 7.6 Auditoría de pendientes reales (Claude, 2026-07-23)
-
-> Ver `collab/aplicado/2026-07-23-auditoria-pendientes-reales.md` para el
-> detalle completo con evidencia línea por línea.
-
-**§1.3 (CVE-2026-40976) — verificado como NO aplicable.** El documento
-original lo marcaba como "riesgo futuro" pendiente de la migración a
-Spring Boot 4.x. Esa migración ya ocurrió (4.1.0). Verificado contra el
-advisory oficial (spring.io/security/cve-2026-40976): el rango afectado
-es 4.0.0–4.0.5, corregido en 4.0.6+. GymFlow está en 4.1.0, fuera de
-rango. Además, la CVE solo aplica a apps que dependen del filter chain
-por default de Spring Security sin configuración propia — GymFlow tiene
-`SecurityConfig.java` explícito, segunda razón independiente por la que
-no aplica. **Cerrado, sin acción requerida.**
-
-**§1.4 (DevTools) — riesgo bajo confirmado, no bloqueante.**
-`spring-boot-devtools` tiene `scope=runtime` + `optional=true` en
-`pom.xml`, configuración estándar que Maven excluye del JAR de
-producción automáticamente. No verificable si Railway usa un build
-alternativo que ignore esto, pero es el comportamiento por defecto.
-
-**§2.2 (X-Forwarded-For) — CERRADO (2026-07-24).** Resuelto vía
-`RemoteIpValve` nativo de Tomcat, ver detalle en la sección 2.2 arriba.
-
-**§2.3 (unique constraint suscripción activa) — CERRADO, verificado
-también en Railway (prod) el 2026-07-24.**
-
-**3 vulnerabilidades HIGH en dependencias del frontend — CERRADO
-(2026-07-23).** `next` bumpeado a `16.2.11` + `overrides` forzando
-`postcss@8.5.22`/`sharp@0.35.3` en `package.json`. Verificado de nuevo
-el 2026-07-27: `npm audit` da 0 vulnerabilidades.
-
 ## 6. Lo que este documento NO cubre (límites honestos del análisis)
 
-- Configuración real de red/firewall de Railway — no verificable desde esta sesión.
+- Configuración real de red/firewall de Railway — no verificable desde las sesiones de agentes.
 - Resultado de un pentest o escaneo automatizado real contra el sistema desplegado.
-- Vulnerabilidades de día cero no públicas.
+- Vulnerabilidades de día cero no publicadas.
 - Ingeniería social, phishing dirigido, o compromiso físico de la máquina de desarrollo.
 
 Este documento es un punto de partida priorizado, no un certificado de seguridad.
 
 ---
 
-## 7. Auditoría de código real — resultados (2026-07-10)
+## 7. Historial de auditoría
 
-> Cada ítem revisado contra el código fuente real de `gymflow-backend` y
-> `gymflow-frontend`. Estado final tras la auditoría y los fixes aplicados
-> en esta sesión.
-
-### 7.0 Hallazgo nuevo, no anticipado — el más grave de toda la auditoría
-
-**Escalada de privilegios en registro público.** `RegisterRequest` exponía un
-campo `rol` obligatorio, y `AuthService.registrar()` lo usaba tal cual
-(`.rol(request.getRol())`) sin ninguna restricción server-side. Cualquiera
-podía registrarse como ADMIN con un solo `POST /api/auth/register` sin
-autenticación previa. Más grave que varios hallazgos ya marcados como
-Críticos porque no depende de ninguna infraestructura mal configurada — es
-un bug de lógica de negocio puro, explotable con cero esfuerzo.
-**Estado: CONFIRMADO y CORREGIDO.** `RegisterRequest` ya no acepta `rol`;
-`AuthService` fuerza `Rol.CLIENTE` siempre.
-
-### 7.1 Hallazgos confirmados y corregidos en esta sesión
-
-| # | Hallazgo | Confirmación | Fix aplicado |
-|---|---|---|---|
-| 1.1 | Redis sin auth | `docker-compose.yml`: sin `requirepass`, puerto `6379:6379` expuesto al host. `application.yaml`: sin `spring.data.redis.password`. | No corregido en código (es config de infra) — **acción pendiente para William**: agregar `requirepass` y no exponer el puerto al host. |
-| 1.2 | Deserialización insegura Redis | `RedisCacheConfig` usa `GenericJackson2JsonRedisSerializer` con `findAndAddModules()`, sin `PolymorphicTypeValidator` restrictivo. | No corregido — depende de resolver 1.1 primero; requiere endurecer el `ObjectMapper` en una sesión dedicada. |
-| 1.3 | CVE-2026-40976 (Boot 4.x) | `pom.xml`: hoy sin `spring-boot-health`, con `spring-boot-starter-actuator` — cumple 3/4 condiciones de la CVE. Aplica a la migración pendiente (PR #4). | No corregido (aún en Boot 3.5.16) — **bloqueante documentado**: no mergear PR #4 sin agregar `spring-boot-health` o revisar el advisory. |
-| 2.1 | Fail-closed rate limit sin manejo de fallo de Redis | `LoginRateLimitFilter` no envolvía la llamada a Redis en try/catch — un fallo de Redis producía una excepción sin manejar, no una política deliberada. | **CORREGIDO.** Ahora captura `RedisConnectionFailureException` y responde 503 explícito, distinguible de 429. |
-| 2.2 | X-Forwarded-For sin validar | `obtenerIpCliente()` confía en el header tal cual, sin validar el proxy de origen. | **Documentado en código, no resuelto** — requiere conocer el rango de IP del proxy de Railway, que no es siempre estático en PaaS. Mitigación parcial: asegurar que el backend no sea alcanzable directo desde internet. |
-| 2.3 | Sin unique constraint para suscripción activa | `SuscripcionService.crear()`: check-then-act clásico (`findByUsuarioIdAndEstado` + `save()` no atómico). Confirmado, sin `@Version` en `Suscripcion`. | **CORREGIDO POR COMPLETO (sesión 3).** `@Version` en la entidad + índice único parcial `uq_suscripcion_activa_por_usuario` aplicado en dev (`scripts/migrations/001_unique_suscripcion_activa.sql`, verificado sin duplicados previos, `CREATE INDEX` exitoso). Ambos casos de la carrera (update concurrente a la misma fila, y creación concurrente de dos filas activas) están cerrados. **Pendiente:** aplicar el mismo script en cualquier otro entorno (staging/prod) antes de asumir que está resuelto ahí también — esta migración es manual, no se propaga sola. |
-| 2.5 | CSRF | `SecurityConfig`: `.csrf(csrf -> csrf.disable())` confirmado — sin ninguna defensa CSRF en el backend. El proxy de Next.js es el punto de exposición real. | **CORREGIDO (defensa en profundidad).** El proxy `[...path]/route.ts` ahora valida `Origin` contra el origen esperado en todo método que muta estado. |
-| 2.6 | SSRF / path traversal en proxy Next.js | Confirmado: `new URL()` normaliza `..`, permitiendo que el path escape del prefijo `/api/` (ej. `/api/backend/../actuator/prometheus`). | **CORREGIDO.** `esPathSeguro()` rechaza segmentos `.`, `..`, vacíos, o con `/`/`\` antes de construir la URL destino. |
-| 2.7 | DoS de parsing JWT sin auth previa | Confirmado como bug real, no solo hipotético: `JwtAuthFilter` llamaba a `jwtUtil.extraerUsername()` sin try/catch — cualquier `Authorization: Bearer <basura>` producía una excepción sin manejar en cada request. | **CORREGIDO.** Try/catch alrededor del parseo (`JwtException`, `IllegalArgumentException`, `UsernameNotFoundException`), más límite de tamaño (2048 chars) antes de invocar el parser. |
-| 3.7 | Sin headers de seguridad HTTP | Confirmado: `next.config.ts` no tenía ninguna configuración de headers. | **CORREGIDO.** Agregado `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Strict-Transport-Security`, `Content-Security-Policy` (frame-ancestors 'none'). |
-| — | Sin `@ControllerAdvice` global | Confirmado: no existía ningún manejo centralizado de excepciones; `RuntimeException` genéricas de los servicios (ej. "Usuario no encontrado") salían como 500 sin status code correcto. | **CORREGIDO.** `GlobalExceptionHandler` nuevo cubre validación, credenciales inválidas (mensaje genérico anti-enumeración), conflictos de integridad/optimistic locking, y Redis caído. |
-
-### 7.2 Correcciones a hallazgos previos (más matizados de lo que se pensó)
-
-- **3.5 (registro sin política de password/anti-bot):** parcialmente incorrecto. `RegisterRequest` sí valida `@Size(min = 8)` en el password, y `/api/auth/register` SÍ está cubierto por el mismo `LoginRateLimitFilter` (10 intentos/min). Sigue faltando: complejidad de password (solo longitud) y CAPTCHA — pero no es la ausencia total que se había asumido.
-- **4.6 (contenedor root):** no aplica tal como estaba escrito — el repo no tiene `Dockerfile` propio; el deploy en Railway probablemente usa build automático (Nixpacks). Revisar si Railway expone alguna opción de usuario no-root cuando se confirme el método de build real.
-
-### 7.4 Verificación en runtime (2026-07-10, sesión 3)
-
-Probado contra el backend real corriendo en local (`.\mvnw.cmd spring-boot:run`), no solo lectura de código:
-
-- **Escalada de privilegios (7.0):** `POST /api/auth/register` con `"rol":"ADMIN"` en el body devuelve un usuario con `rol: CLIENTE` en la respuesta. Confirmado corregido en runtime, no solo en el código fuente.
-- **2.7 (DoS/excepción sin manejar en JwtAuthFilter):** `GET /api/planes` con `Authorization: Bearer esto-no-es-un-jwt-valido` devuelve **403 Forbidden** limpio. Antes del fix esto hubiera propagado una excepción de JJWT sin capturar. Confirmado corregido en runtime.
-- Nota aparte: los stack traces de `AuthorizationDeniedException` visibles en el log con `SECURITY_LOG_LEVEL=TRACE` son el mecanismo interno normal de Spring Security (control de flujo vía excepciones), no relacionados con el bug corregido — no confundir con una regresión.
-
-### 7.3 Pendientes reales (actualizado 2026-07-27)
-
-Todos los ítems de código de esta lista están cerrados. Lo único que
-sigue genuinamente pendiente es una verificación que requiere acceso a
-la consola de Railway, no trabajo de código:
-
-1. **Confirmar en runtime de producción (Railway) que `requirepass` de
-   Redis (1.1) está efectivamente activo ahí.** En dev (`docker-compose.yml`)
-   está confirmado: `requirepass` + bind a `127.0.0.1`. No verificado en
-   prod por falta de acceso a esa consola desde las sesiones de agentes.
-
-Historial (todo lo demás, cerrado):
-- Redis auth (1.1) en dev — hecho 2026-07-11.
-- `RedisCacheConfig`/`@EnableCaching` removido (1.2) — hecho 2026-07-11.
-- Migración de índice único de suscripción activa (2.3) — hecho en dev
-  2026-07-10, verificado también en Railway (prod) 2026-07-24.
-- Migración a Spring Boot 4.1.0 con `spring-boot-health` presente (1.3) —
-  hecho, PR #10 mergeado; CVE-2026-40976 no aplica (fuera de rango +
-  `SecurityConfig` propio).
-- `DevTools` con `scope=runtime`/`optional=true` (1.4) — confirmado sin
-  acción adicional necesaria.
-- Paginación en listados (3.3) — hecho 2026-07-11.
-- Password policy (3.5) — hecho 2026-07-12.
-- X-Forwarded-For (2.2) — hecho 2026-07-24, ver sección 2.2 arriba.
-- npm audit HIGH (`next`/`postcss`/`sharp`) — hecho 2026-07-23, verificado
-  en 0 vulnerabilidades 2026-07-27.
+La bitácora completa de proceso — incluyendo la reclasificación honesta del
+hallazgo 1.2 (evidencia de sandbox de Codex Security), la verificación de
+runtime, la auditoría de pendientes del 23/07 y la revisión de features
+nuevas del 01/08 — vive en [`SECURITY_AUDIT_LOG.md`](SECURITY_AUDIT_LOG.md).
+El resumen ejecutivo con la tabla hallazgos→estado y quién hizo qué está en
+[`SECURITY_CHANGELOG.md`](SECURITY_CHANGELOG.md).
