@@ -2,10 +2,14 @@ package com.gymflow.backend.client;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.net.http.HttpClient;
+import java.time.Duration;
 import java.util.Map;
 
 /**
@@ -33,7 +37,20 @@ public class ResendEmailClient implements EmailClient {
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader("Authorization", "Bearer " + apiKey)
+                .requestFactory(crearRequestFactory())
                 .build();
+    }
+
+    /**
+     * Timeouts explícitos (hallazgo M1 de la revisión del 2026-08-01): el
+     * default del JDK HttpClient es infinito — un proveedor colgado ocuparía
+     * el thread de Tomcat indefinidamente. Connect 3s + read 30s.
+     */
+    private static ClientHttpRequestFactory crearRequestFactory() {
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
+                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
+        factory.setReadTimeout(Duration.ofSeconds(30));
+        return factory;
     }
 
     @Override

@@ -95,8 +95,8 @@ public class NotificacionVencimientoService {
                 // No se marca la suscripción: el reintento queda para la
                 // próxima corrida del job. Un envío fallido no debe tumbar
                 // el resto del lote.
-                log.warn("No se pudo notificar el vencimiento de la suscripción {} (usuario {}): {}",
-                        suscripcion.getId(), suscripcion.getUsuario().getEmail(), ex.getMessage());
+                log.warn("No se pudo notificar el vencimiento de la suscripción {} (usuario id {}): {}",
+                        suscripcion.getId(), suscripcion.getUsuario().getId(), ex.getMessage());
             }
         }
 
