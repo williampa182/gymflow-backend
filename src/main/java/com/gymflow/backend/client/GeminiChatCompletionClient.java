@@ -1,14 +1,21 @@
 package com.gymflow.backend.client;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.net.http.HttpClient;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Adaptador a la API de Gemini (Google), elegido en vez de Anthropic el
@@ -32,6 +39,8 @@ import java.util.Map;
 @ConditionalOnProperty(name = "app.chat.provider", havingValue = "gemini", matchIfMissing = true)
 public class GeminiChatCompletionClient implements ChatCompletionClient {
 
+    private static final Logger log = LoggerFactory.getLogger(GeminiChatCompletionClient.class);
+
     private static final String GENERATE_CONTENT_PATH_TEMPLATE = "/v1beta/models/%s:generateContent";
 
     private final RestClient restClient;
@@ -50,7 +59,21 @@ public class GeminiChatCompletionClient implements ChatCompletionClient {
                 .baseUrl(baseUrl)
                 .defaultHeader("x-goog-api-key", apiKey)
                 .defaultHeader("content-type", MediaType.APPLICATION_JSON_VALUE)
+                .requestFactory(crearRequestFactory())
                 .build();
+    }
+
+    /**
+     * Timeouts explícitos (hallazgo M1 de la revisión del 2026-08-01): el
+     * default del JDK HttpClient es infinito — un proveedor colgado ocuparía
+     * el thread de Tomcat indefinidamente. Connect 3s + read 30s (respuestas
+     * LLM de maxOutputTokens 1024 entran de sobra en 30s).
+     */
+    private static ClientHttpRequestFactory crearRequestFactory() {
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
+                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
+        factory.setReadTimeout(Duration.ofSeconds(30));
+        return factory;
     }
 
     @Override
@@ -71,13 +94,30 @@ public class GeminiChatCompletionClient implements ChatCompletionClient {
         );
 
         try {
+            long inicio = System.nanoTime();
             GeminiResponse respuesta = restClient.post()
                     .uri(GENERATE_CONTENT_PATH_TEMPLATE.formatted(model))
                     .body(body)
                     .retrieve()
                     .body(GeminiResponse.class);
+            long duracionMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - inicio);
 
-            return extraerTexto(respuesta);
+            String texto = extraerTexto(respuesta);
+
+            // Log de uso sin contenido (blindaje 2026-08-01): solo proveedor,
+            // modelo y tokens — sirve para vigilar la cuota del tier gratis
+            // sin exponer ni planes ni el mensaje del usuario en los logs.
+            if (respuesta != null && respuesta.usageMetadata() != null) {
+                log.info("Chat completado: proveedor=gemini, modelo={}, tokens_entrada={}, tokens_salida={}, duracion_ms={}",
+                        model,
+                        respuesta.usageMetadata().promptTokenCount(),
+                        respuesta.usageMetadata().candidatesTokenCount(),
+                        duracionMs);
+            } else {
+                log.info("Chat completado: proveedor=gemini, modelo={}, duracion_ms={}",
+                        model, duracionMs);
+            }
+            return texto;
         } catch (RestClientResponseException ex) {
             throw new ChatCompletionException(
                     "La API de Gemini devolvió un error (" + ex.getStatusCode() + ")", ex
@@ -101,15 +141,18 @@ public class GeminiChatCompletionClient implements ChatCompletionClient {
 
     /**
      * Subconjunto mínimo del esquema de respuesta de generateContent que
-     * necesitamos: solo el texto del primer candidato. No mapeamos
+     * necesitamos: el texto del primer candidato y el conteo de tokens de
+     * usageMetadata (para el log de uso sin contenido). No mapeamos
      * safetyRatings, finishReason ni ningún otro campo a propósito.
      */
-    private record GeminiResponse(List<Candidate> candidates) {
+    private record GeminiResponse(List<Candidate> candidates, UsageMetadata usageMetadata) {
         private record Candidate(Content content) {
         }
         private record Content(List<Part> parts) {
         }
         private record Part(String text) {
+        }
+        private record UsageMetadata(Integer promptTokenCount, Integer candidatesTokenCount) {
         }
     }
 }

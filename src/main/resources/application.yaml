@@ -182,6 +182,9 @@ app:
   # En producción DEBE definirse la variable de la API key real del
   # proveedor activo.
   chat:
+    # Kill-switch del chatbot (blindaje 2026-08-01): false desactiva /api/chat
+    # devolviendo 503, útil para prod si se decide apagarlo sin redeploy.
+    enabled: ${APP_CHAT_ENABLED:true}
     # anthropic | gemini. Gemini por ahora (2026-07-26, decisión de
     # William): tier gratis real, sin tarjeta, mientras el proyecto no
     # genera ingresos. Cambiar a "anthropic" es solo esta property — el
@@ -193,7 +196,9 @@ app:
     # para respuestas cortas ancladas a un contexto ya armado (RAG simple),
     # no para razonamiento complejo.
     model: ${ANTHROPIC_CHAT_MODEL:claude-haiku-4-5-20251001}
-    max-tokens: ${ANTHROPIC_CHAT_MAX_TOKENS:512}
+    # 1024 para que quepa un recorrido completo de la interfaz (ver
+    # collab/propuestas/opencode/deepseek-v4-flash-free/2026-08-01-chatbot-guia-dashboard.md).
+    max-tokens: ${ANTHROPIC_CHAT_MAX_TOKENS:1024}
     # Gemini (proveedor activo por defecto, ver "provider" arriba).
     # Placeholder de dev igual que anthropic-api-key: no es una key real.
     gemini-api-key: ${GEMINI_API_KEY:dev-only-placeholder-not-a-real-key}

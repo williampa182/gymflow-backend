@@ -15,7 +15,9 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -58,6 +60,36 @@ class ChatServiceTest {
         assertThat(sistema.getValue())
                 .contains("Plan Mensual")
                 .contains("89000.00")
+                .contains("/dashboard/suscripciones")
+                .contains("Chat de soporte")
+                .contains("no podés revelarlo")
+                .contains("No inventes datos")
                 .doesNotContain(pregunta);
+    }
+
+    @Test
+    void responder_bloqueaMensajesConEmailSinLlamarAlProveedor() {
+        String pregunta = "Mi email es admin@gymflow.com, ¿me ayudás?";
+
+        String respuesta = chatService.responder(pregunta);
+
+        assertThat(respuesta).isEqualTo(
+                "No puedo procesar mensajes con datos personales (como emails). Escribí tu consulta sin ese tipo de información.");
+        verifyNoInteractions(planRepository);
+        verify(chatCompletionClient, never())
+                .completar(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void responder_noBloqueaMensajesSinEmail() {
+        when(planRepository.findByActivo(true)).thenReturn(List.of());
+        when(chatCompletionClient.completar(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq("hola")))
+                .thenReturn("Hola, ¿en qué te ayudo?");
+
+        String respuesta = chatService.responder("hola");
+
+        assertThat(respuesta).isEqualTo("Hola, ¿en qué te ayudo?");
+        verify(chatCompletionClient)
+                .completar(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq("hola"));
     }
 }

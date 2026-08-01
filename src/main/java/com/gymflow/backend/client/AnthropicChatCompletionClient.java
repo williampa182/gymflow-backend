@@ -1,14 +1,21 @@
 package com.gymflow.backend.client;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.net.http.HttpClient;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Único punto del proyecto que conoce HTTP y la API key de Anthropic. El
@@ -38,6 +45,8 @@ import java.util.Map;
 @ConditionalOnProperty(name = "app.chat.provider", havingValue = "anthropic")
 public class AnthropicChatCompletionClient implements ChatCompletionClient {
 
+    private static final Logger log = LoggerFactory.getLogger(AnthropicChatCompletionClient.class);
+
     private static final String ANTHROPIC_VERSION = "2023-06-01";
     private static final String MESSAGES_PATH = "/v1/messages";
 
@@ -58,7 +67,21 @@ public class AnthropicChatCompletionClient implements ChatCompletionClient {
                 .defaultHeader("x-api-key", apiKey)
                 .defaultHeader("anthropic-version", ANTHROPIC_VERSION)
                 .defaultHeader("content-type", MediaType.APPLICATION_JSON_VALUE)
+                .requestFactory(crearRequestFactory())
                 .build();
+    }
+
+    /**
+     * Timeouts explícitos (hallazgo M1 de la revisión del 2026-08-01): el
+     * default del JDK HttpClient es infinito — un proveedor colgado ocuparía
+     * el thread de Tomcat indefinidamente. Connect 3s + read 30s (respuestas
+     * LLM de maxTokens 1024 entran de sobra en 30s).
+     */
+    private static ClientHttpRequestFactory crearRequestFactory() {
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
+                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
+        factory.setReadTimeout(Duration.ofSeconds(30));
+        return factory;
     }
 
     @Override
@@ -78,13 +101,30 @@ public class AnthropicChatCompletionClient implements ChatCompletionClient {
         );
 
         try {
+            long inicio = System.nanoTime();
             AnthropicResponse respuesta = restClient.post()
                     .uri(MESSAGES_PATH)
                     .body(body)
                     .retrieve()
                     .body(AnthropicResponse.class);
+            long duracionMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - inicio);
 
-            return extraerTexto(respuesta);
+            String texto = extraerTexto(respuesta);
+
+            // Log de uso sin contenido (blindaje 2026-08-01): solo proveedor,
+            // modelo y tokens — sirve para vigilar la cuota del tier gratis
+            // sin exponer ni planes ni el mensaje del usuario en los logs.
+            if (respuesta != null && respuesta.usage() != null) {
+                log.info("Chat completado: proveedor=anthropic, modelo={}, tokens_entrada={}, tokens_salida={}, duracion_ms={}",
+                        model,
+                        respuesta.usage().input_tokens(),
+                        respuesta.usage().output_tokens(),
+                        duracionMs);
+            } else {
+                log.info("Chat completado: proveedor=anthropic, modelo={}, duracion_ms={}",
+                        model, duracionMs);
+            }
+            return texto;
         } catch (RestClientResponseException ex) {
             throw new ChatCompletionException(
                     "La API de Anthropic devolvió un error (" + ex.getStatusCode() + ")", ex
@@ -104,11 +144,14 @@ public class AnthropicChatCompletionClient implements ChatCompletionClient {
 
     /**
      * Subconjunto mínimo del esquema de respuesta de /v1/messages que
-     * necesitamos: solo el texto. No mapeamos tool_use ni ningún otro tipo
-     * de bloque a propósito — este cliente no soporta tool calling.
+     * necesitamos: el texto y el conteo de tokens de usage (para el log de
+     * uso sin contenido). No mapeamos tool_use ni ningún otro tipo de bloque
+     * a propósito — este cliente no soporta tool calling.
      */
-    private record AnthropicResponse(List<ContentBlock> content) {
+    private record AnthropicResponse(List<ContentBlock> content, Usage usage) {
         private record ContentBlock(String type, String text) {
+        }
+        private record Usage(Integer input_tokens, Integer output_tokens) {
         }
     }
 }
