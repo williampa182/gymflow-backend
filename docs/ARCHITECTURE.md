@@ -1,16 +1,20 @@
 # GymFlow — Arquitectura técnica completa
 
-> Documento vivo. Última actualización: 2026-07-13 (auditoría de seguridad +
-> dashboard ADMIN, ver §6.1 y §9). Pensado para que cualquier sesión futura
-> (con Claude, otra IA, u otro desarrollador) tenga el contexto técnico
-> completo de una sola lectura, sin depender de memoria de conversación.
+> Documento vivo. Última actualización: 2026-08-01 (migración a Spring Boot
+> 4.1.0, deploy a Railway, chatbot, notificaciones Resend — ver §2.1, §2.10,
+> §2.11 y §7). Pensado para que cualquier sesión futura (con Claude, otra IA,
+> u otro desarrollador) tenga el contexto técnico completo de una sola
+> lectura, sin depender de memoria de conversación. Para el estado de
+> seguridad vigente, el source of truth es [`THREAT_MODEL.md`](THREAT_MODEL.md)
+> + [`SECURITY_CHANGELOG.md`](SECURITY_CHANGELOG.md) + [`SECURITY_AUDIT_LOG.md`](SECURITY_AUDIT_LOG.md).
 
 ## 1. Visión general
 
 GymFlow es un sistema de gestión de gimnasios (planes, suscripciones,
 usuarios con roles) construido como proyecto de portafolio. Stack: Spring
 Boot (backend) + Next.js (frontend) + PostgreSQL + Redis, con CI/CD en
-GitHub Actions y despliegue planeado en Railway.
+GitHub Actions y **ambos servicios desplegados en Railway** (demostraciones
+en vivo en el README de cada repo).
 
 **Repos** (ambos privados):
 - `github.com/williampa182/gymflow-backend`
@@ -28,29 +32,36 @@ GitHub Actions y despliegue planeado en Railway.
 
 | Componente | Versión |
 |---|---|
-| Spring Boot | 3.5.16 (migración a 4.1.0 programada, ver §7) |
+| Spring Boot | 4.1.0 (migrado desde 3.5.16, sesión 2026-07-26) |
 | Java | 21 (Temurin) |
 | Maven | vía wrapper `mvnw` |
-| PostgreSQL | 16 (Docker: `postgres:16`) |
-| Redis | 7-alpine |
+| PostgreSQL | 16 en dev (Docker: `postgres:16`); **18 en Railway prod** (divergencia documentada, ver §7) |
+| Redis | 7-alpine (`requirepass` + bind a `127.0.0.1` en dev) |
 | JJWT | 0.13.0 |
-| springdoc-openapi | 2.8.9 |
+| springdoc-openapi | 3.0.3 (requiere Boot 4.x) |
 
 ### 2.2 Estructura de paquetes (`com.gymflow.backend`)
 
 ```
+client/           ChatCompletionClient (interfaz), GeminiChatCompletionClient,
+                  AnthropicChatCompletionClient, ChatCompletionException,
+                  EmailClient, ResendEmailClient, EmailEnvioException, EmailPayload
 config/           SecurityConfig, SwaggerConfig
-controller/       AuthController, PlanController, SuscripcionController, UsuarioController, DashboardAdminController
+controller/       AuthController, PlanController, SuscripcionController, UsuarioController,
+                  DashboardAdminController, ChatController, DiagnosticHeaderController
 dto/              request/, response/, dashboard/, PlanRequestDTO, PlanResponseDTO, etc.
 exception/        GlobalExceptionHandler (@RestControllerAdvice)
 model/            Usuario, Plan, Suscripcion + enums/ (Rol, TipoPlan, EstadoSuscripcion)
 observability/    CorrelationIdFilter
 repository/       UsuarioRepository, PlanRepository, SuscripcionRepository (Spring Data JPA) + projection/
 security/
-  filter/         LoginRateLimitFilter
+  filter/         LoginRateLimitFilter, ChatRateLimitFilter
   jwt/            JwtAuthFilter, JwtUtil
+  auth/           TimingSafeAuthenticationProvider
   service/        UserDetailsServiceImpl
-service/          AuthService, PlanService, SuscripcionService, UsuarioService, DashboardAdminService
+service/          AuthService, PlanService, SuscripcionService, UsuarioService,
+                  DashboardAdminService, ChatService, NotificacionVencimientoService,
+                  NotificacionVencimientoScheduler, PlantillaEmailVencimiento
 validation/       NotCommonPassword, NotCommonPasswordValidator
 ```
 
@@ -65,7 +76,7 @@ validation/       NotCommonPassword, NotCommonPasswordValidator
 - `nombre` (unique), `descripcion`, `precio` (**`BigDecimal`**, nunca `Double` — precisión monetaria), `duracionDias`, `tipo` (enum `TipoPlan`), `limiteClases`, `incluyeClases`, `incluyeEntrenadorPersonal`, `activo`, `creadoEn`
 
 **`Suscripcion`** (`suscripciones`):
-- `usuario` (`@ManyToOne` lazy), `plan` (`@ManyToOne` lazy), `fechaInicio`, `fechaFin`, `estado` (enum `EstadoSuscripcion`), `creadoEn`
+- `usuario` (`@ManyToOne` lazy), `plan` (`@ManyToOne` lazy), `fechaInicio`, `fechaFin`, `estado` (enum `EstadoSuscripcion`), `creadoEn`, `notificadoEn` (tracking del aviso de vencimiento, agregado 2026-07-31, migración `002`)
 - `fechaFin` se calcula automáticamente en `@PrePersist`: `fechaInicio.plusDays(plan.getDuracionDias())` — nunca se setea manualmente
 - `@Version` (optimistic locking, agregado 2026-07-11) — protege contra dos requests modificando la misma fila a la vez (ej. doble cancelación). Complementado con índice único parcial en Postgres `uq_suscripcion_activa_por_usuario` (`scripts/migrations/001_unique_suscripcion_activa.sql`) que cierra el otro caso de la carrera: dos creaciones simultáneas de suscripción activa para el mismo usuario.
 
@@ -95,11 +106,20 @@ validation/       NotCommonPassword, NotCommonPasswordValidator
 **`/api/dashboard/admin`** (`DashboardAdminController`, agregado 2026-07-12) — `ADMIN`:
 - `GET /api/dashboard/admin/estadisticas` — agregaciones server-side (usuarios activos por rol, ingresos estimados por tipo de plan sobre suscripciones `ACTIVA`, suscripciones por estado). Ver §9 para el detalle completo.
 
+**`/api/chat`** (`ChatController`, agregado 2026-07-26) — **cualquier usuario autenticado**:
+- `POST /api/chat` — chatbot de soporte con RAG simple sobre los planes + guía del dashboard (ver §2.10). Rate limited con `ChatRateLimitFilter` (Redis), kill-switch `app.chat.enabled` → 503.
+
+**`/api/v1/debug`** (`DiagnosticHeaderController`, agregado 2026-07-24) — **temporal**:
+- `GET /api/v1/debug/headers` — devuelve `remoteAddr` y todos los headers (verificación del fix 2.2, X-Forwarded-For). Solo se registra si `app.debug-headers.enabled=true` (default `false`, vía `@ConditionalOnProperty`); candidato a eliminación cuando cumpla su función.
+
 **Actuator** (agregado 2026-07-07, ver §6):
 - `GET /actuator/health`, `/actuator/info` — públicos
 - `GET /actuator/prometheus`, resto de `/actuator/**` — `ADMIN`
 
-**Swagger**: `/swagger-ui/**`, `/v3/api-docs/**` — públicos
+**Swagger**: `/swagger-ui/**`, `/v3/api-docs/**` — **gateado**: habilitado solo con
+`SWAGGER_ENABLED=true` (default `false`, fix security-deep-dive §2). Cuando está
+deshabilitado, springdoc no registra los handlers y los `permitAll()` de
+`SecurityConfig` no matchean nada — la defensa real está en el yaml.
 
 La autorización a nivel de método usa `@PreAuthorize("hasRole('ADMIN')")`
 (habilitado vía `@EnableMethodSecurity` en `SecurityConfig`), no solo reglas
@@ -120,8 +140,14 @@ ExceptionTranslationFilter → AuthorizationFilter
 **`LoginRateLimitFilter`**: solo actúa sobre `/api/auth/login` y
 `/api/auth/register`. Cuenta intentos por IP en Redis (`ratelimit:auth:<ip>`),
 ventana fija de 1 minuto, máximo 10 intentos → `429 Too Many Requests`. La IP
-se obtiene de `X-Forwarded-For` si existe (necesario detrás del proxy de
-Railway), si no de `getRemoteAddr()`.
+se resuelve con `RemoteIpValve` nativo de Tomcat (`forward-headers-strategy:
+native` + `internal-proxies` en `application.yaml`), que lee
+`X-Forwarded-For` de derecha a izquierda descartando saltos internos —
+fix del hallazgo 2.2 (ver `THREAT_MODEL.md`). Si Redis no responde, falla
+cerrado con 503 explícito (no 429), para que el estado sea distinguible.
+
+**`ChatRateLimitFilter`**: mismo patrón, solo sobre `/api/chat`
+(`ratelimit:chat:<ip>`), mismo fail-closed con Redis.
 
 **`JwtAuthFilter`**: lee el header `Authorization: Bearer <token>` (NO lee
 cookies directamente — eso lo hace el proxy de Next.js, ver §3.3). Si el
@@ -132,9 +158,18 @@ authorities del usuario y lo pone en el `SecurityContextHolder`.
 entorno `JWT_SECRET`). Firma con `jjwt` 0.13.0, expiración configurable vía
 `app.jwt.expiration` (`JWT_EXPIRATION`, default 86400000 ms = 24h).
 
-**`CorsConfigurationSource`**: origen permitido hardcodeado a
-`http://localhost:3000` — **hay que actualizar esto al desplegar a Railway**
-con el dominio real del frontend (ver §7, pendientes de deploy).
+**`TimingSafeAuthenticationProvider`** (security-deep-dive §1, Fix B):
+envuelve el `DaoAuthenticationProvider` (constructor explícito de Spring
+Security 7 — breaking change de la migración a Boot 4) y ejecuta un BCrypt
+dummy cuando el usuario no existe, eliminando el delta de timing que
+permitía enumerar usuarios por login. `AuthService.login()` rehashea
+automáticamente hashes con costo desactualizado (los sembrados a cost 10
+reabrían el canal).
+
+**`CorsConfigurationSource`**: orígenes permitidos vía variable de entorno
+`ALLOWED_ORIGINS` (separados por coma; default dev `http://localhost:3000`).
+En Railway se setea con la(s) URL(s) real(es) del frontend — ya no hay nada
+hardcodeado (ver `SecurityConfig.java`).
 
 **`CorrelationIdFilter`** (`observability/`, agregado 2026-07-07): no es
 parte de la cadena de Spring Security, es un `@Component` con
@@ -181,9 +216,10 @@ operativo completo):
    el `pg_dump`/`psql` que ya trae el contenedor Docker, sin instalar nada
    en Windows. Retención de los últimos 10 backups locales.
 2. **Producción**: `.github/workflows/backup.yml` — cron diario 07:00 UTC,
-   `pg_dump` contra Railway vía secret `PROD_DATABASE_URL` (aún no
-   configurado — pendiente hasta que exista el deploy), verificación de
-   integridad, artifact de GitHub con 35 días de retención.
+   `pg_dump` (cliente 18, debe coincidir con el Postgres de Railway) contra
+   el secret `PROD_DATABASE_URL` — **configurado y corriendo desde
+   2026-07-26**, verificación de integridad, artifact de GitHub con 35 días
+   de retención.
 
 **Limitación conocida y aceptada**: no es Point-in-Time Recovery real (eso
 existe en Railway pero solo en plan Pro). Es snapshot diario — ventana de
@@ -192,16 +228,56 @@ pérdida de hasta ~24h entre backups.
 ### 2.9 CI/CD
 
 `.github/workflows/backend-ci.yml`: se dispara en push/PR a `main`. Compila
-con Java 21 (Temurin), corre los 16 tests unitarios (Mockito puro, sin
-Spring context, no requieren Docker). `GymflowBackendApplicationTests` está
-`@Disabled` por depender de Docker.
+con Java 21 (Temurin) y corre la suite completa de tests — 67 tests
+(1 `@Disabled`, `GymflowBackendApplicationTests`, por depender de Docker).
+Desde el fix del 2026-07-26, **el CI levanta Postgres y Redis reales como
+`services`** (antes solo corría tests Mockito puros sin Spring context) —
+esto destapó 3 bugs reales: Backend CI nunca había probado contra la BD,
+el backup de producción nunca corrió, y Railway resultó estar en Postgres 18.
 
 `.github/workflows/backup.yml`: ver §2.8.
 
-`dependabot.yml`: actualizaciones semanales. **PRs abiertos y atados entre
-sí, NO mergear por separado**: PR #4 (`spring-boot-starter-parent`
-3.5.16→4.1.0) y PR #7 (`springdoc-openapi` 2.8.9→3.0.3, requiere Boot 4.x
-como parent). Ver §7 para el plan de migración.
+`dependabot.yml`: actualizaciones semanales. **La migración a Boot 4.1.0 +
+springdoc 3.0.3 (PRs #4 y #7) se completó en la sesión del 2026-07-26.**
+Regla vigente del incidente de ese PR: revisar el changelog real antes de
+mergear cualquier bump de Dependabot (ver `THREAT_MODEL.md` §4.3).
+
+### 2.10 Chatbot de soporte (agregado 2026-07-26, blindado 2026-08-01)
+
+`POST /api/chat` — cualquier usuario autenticado, con rate limit en Redis
+(`ChatRateLimitFilter`) y kill-switch `app.chat.enabled`/`APP_CHAT_ENABLED`
+(default `true`; `false` → 503 sin redeploy).
+
+- **RAG simple**: contexto = los planes activos del sistema + guía estática
+  del dashboard (secciones, rutas, roles, acciones — `GUIA_DASHBOARD` en
+  `ChatService`). El bot no ejecuta acciones ni ve datos de otros usuarios.
+- **Proveedor**: `app.chat.provider` — `gemini` (default, tier gratis,
+  modelo `gemini-3.1-flash-lite`) o `anthropic` (`claude-haiku-4-5`). Ambos
+  adaptadores en `client/` con la interfaz `ChatCompletionClient`; cambiar
+  de proveedor es solo una property. `max-tokens` 1024 como techo (respuestas
+  breves por instrucción de prompt, para cuidar la cuota del tier gratis).
+- **Blindaje (2026-08-01)**: prompt endurecido (no revelar instrucciones
+  internas/stack, no inventar datos, no pedir PII); filtro de emails en
+  `ChatService` (regex → respuesta fija sin llamar al proveedor ni quemar
+  cuota); aviso de proveedor externo en el UI del chat; log de uso sin
+  contenido (proveedor/modelo/tokens/duración en ambos clientes).
+- **Frontend**: `ChatWidget.tsx` flotante en el dashboard, con persistencia
+  de la conversación en `sessionStorage` (muere al cerrar la pestaña).
+
+### 2.11 Notificaciones de vencimiento vía Resend (agregado 2026-07-31)
+
+`NotificacionVencimientoService` + scheduler diario (`@Scheduled`, cron
+configurable `app.email.aviso-cron`, default 09:00):
+
+- Ventana abierta `hoy..hoy+7` (`app.email.aviso-ventana-dias`) con tracking
+  por `notificado_en` (migración `002`) — cada suscripción se notifica una
+  sola vez.
+- `ResendEmailClient` (HTTP directo con `RestClient`, patrón `client/`, cero
+  dependencias nuevas) + `PlantillaEmailVencimiento` (HTML con `<table>` +
+  texto plano, escapado con `HtmlUtils`). CTA "Renovar ahora" →
+  `app.email.cta-base-url` + `/dashboard/suscripciones`.
+- Gateado por `app.email.aviso-enabled` (los tests lo apagan). Log sin PII
+  (solo `usuario id`). Timeouts connect 3s / read 30s (fix M1, 2026-08-01).
 
 ---
 
@@ -210,23 +286,34 @@ como parent). Ver §7 para el plan de migración.
 ### 3.1 Estructura (`src/`)
 
 ```
+proxy.ts                      Gate de rutas /dashboard/* (requiere sesión)
 app/
+  page.tsx                    Landing (incluye "Decisiones técnicas" + video del dashboard)
+  login/, register/           Páginas de auth (AuthShell compartido)
+  dashboard/
+    layout.tsx + page.tsx     + planes/, suscripciones/, usuarios/
+    _components/              AdminDashboardCharts (Recharts), ChatWidget
   api/
     auth/login/route.ts       Route Handler: recibe credenciales, llama al
                                backend, setea cookies httpOnly (token) y
                                legible (session)
     auth/logout/route.ts      Limpia cookies
-    backend/[...path]/route.ts Proxy genérico: reenvía cualquier request a
-                               /api/backend/* hacia el backend real, adjuntando
-                               el JWT como Authorization: Bearer
-  dashboard/                  layout.tsx + page.tsx + planes/, suscripciones/, usuarios/
-  login/page.tsx
-  layout.tsx, page.tsx, globals.css
+    auth/register/route.ts    Ídem login, para registro
+    auth/session/route.ts     Expone la sesión legible (id, nombre, rol)
+    backend/[...path]/route.ts Proxy genérico: reenvía /api/backend/* al
+                               backend real, adjuntando el JWT como
+                               Authorization: Bearer + valida Origin en
+                               métodos de mutación
+components/                   AuthShell, ButtonSpinner, EmptyState, PageHeader,
+                               Select (custom, a11y), Skeleton, ToastHost
 lib/
-  api.ts                      Cliente HTTP (probablemente axios) hacia /api/backend/*
+  api.ts                      Cliente axios hacia /api/backend/* (timeout 15s, 30s en /chat)
   auth.ts                     Helpers de sesión
-  ui.ts                       Utilidades de UI
-proxy.ts                      (raíz de src/)
+  chatStorage.ts              Persistencia del chat en sessionStorage
+  format.ts                   formatFecha (es-CO) / formatMoneda (COP)
+  toast.tsx                   Sistema de toasts custom (cero dependencias)
+  ui.ts                       Tokens de UI del sistema "sala de máquinas"
+  useFocusTrap.ts, usePageTitle.ts, useRequireRole.ts
 types/index.ts                Tipos TypeScript compartidos
 ```
 
@@ -234,12 +321,17 @@ types/index.ts                Tipos TypeScript compartidos
 
 Concepto "sala de máquinas" (industrial/gimnasio): paleta concreto/industrial
 con acento ámbar, tipografías Oswald + Inter + JetBrains Mono, badges
-circulares tipo placa de peso para stats. Mobile responsive, con overflow de
-tablas corregido.
+circulares tipo placa de peso para stats, remaches y sombras duras. Mobile
+responsive, con overflow de tablas corregido. Componentes propios: `Select`
+custom (roving focus, accesible, con `<select>` nativo oculto), toasts sin
+dependencias (`lib/toast.tsx`), `PageHeader`, `EmptyState`, skeletons,
+`AuthShell`/`ButtonSpinner` compartidos. Tokens en `globals.css` + `lib/ui.ts`.
 
 ### 3.3 Mecanismo de autenticación — el detalle que más importa
 
-**El JWT NUNCA llega al JavaScript del navegador.** Flujo exacto:
+**El JWT NUNCA llega al JavaScript del navegador.** Flujo exacto
+(login y register usan el mismo patrón; `auth/session` expone solo la
+cookie legible):
 
 1. El navegador hace `POST /api/auth/login` — esto pega a la ruta LOCAL de
    Next.js (`app/api/auth/login/route.ts`), NO directo al backend Spring.
@@ -257,7 +349,9 @@ tablas corregido.
 5. `app/api/backend/[...path]/route.ts` (corre server-side) lee la cookie
    `token` (que SÍ puede leer porque está en el servidor), arma el header
    `Authorization: Bearer <token>`, y reenvía la request real al backend
-   Spring en `BACKEND_URL/api/<path>`.
+   Spring en `BACKEND_URL/api/<path>`. En métodos de mutación valida el
+   header `Origin` contra `NEXT_PUBLIC_APP_ORIGIN` (defensa CSRF en
+   profundidad, ver `THREAT_MODEL.md` §2.5).
 6. La respuesta del backend se devuelve tal cual al cliente.
 
 **Por qué importa**: esto es lo que hace que un ataque XSS no pueda robarse
@@ -266,20 +360,30 @@ lo bloquea a nivel de navegador. El precio es que TODO request autenticado
 pasa por un hop extra (navegador → Next.js server → Spring backend), pero es
 el patrón correcto para SPAs con JWT.
 
-**Variable de entorno clave**: `BACKEND_URL` (default `http://localhost:8080`
-en dev) — en Railway hay que apuntarla a la URL interna del backend.
+**Variables de entorno clave**: `BACKEND_URL` (server-side, default
+`http://localhost:8080`) y `NEXT_PUBLIC_APP_ORIGIN` (origen esperado para la
+validación de Origin) — ambas seteadas en Railway.
 
 ---
 
 ## 4. Infraestructura local (desarrollo)
 
 `docker-compose.yml` (en `gymflow-backend/`):
-- `postgres:16` → puerto 5432, credenciales `gymflow_user`/`gymflow_pass`/`gymflow_db`
-- `redis:7-alpine` → puerto 6379
+- `postgres:16` → puerto 5432, credenciales `gymflow_user`/`gymflow_pass`/`gymflow_db` (comentario "DEV ONLY" explícito, hallazgo 4.5)
+- `redis:7-alpine` → `127.0.0.1:6379:6379` con `requirepass` (`REDIS_PASSWORD`, default dev `gymflow_redis_dev_only_change_me`) — fix del hallazgo 1.1
 
 **Orden de arranque obligatorio**: `docker-compose up -d` SIEMPRE antes de
 `.\mvnw spring-boot:run` — si el backend intenta conectar antes de que
 Postgres/Redis estén arriba, falla el arranque.
+
+**`.env` local**: el backend carga `.env` automáticamente vía
+`spring.config.import: "optional:file:.env[.properties]"` (agregado
+2026-07-30) — para sobrescribir defaults de dev, copiar `.env.example` a
+`.env`. El frontend también usa su `.env`.
+
+**Nota de versiones divergentes**: dev corre Postgres 16, Railway prod corre
+18 — el backup de CI usa el cliente 18 (ver §2.8). Pendiente alinear el
+`docker-compose.yml` a 18 (ver §7).
 
 **Usuarios de prueba** (sembrados en dev):
 - `william@gymflow.com` / `admin1234` (ADMIN, id 1)
@@ -294,28 +398,40 @@ Postgres/Redis estén arriba, falla el arranque.
 | Variable | Default dev | Notas |
 |---|---|---|
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | localhost:5432/gymflow_db/gymflow_user/gymflow_pass | |
-| `REDIS_HOST`, `REDIS_PORT` | localhost:6379 | |
+| `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` | localhost:6379 / `gymflow_redis_dev_only_change_me` | Password debe coincidir con `docker-compose.yml` (hallazgo 1.1) |
 | `SERVER_PORT` | 8080 | |
 | `DDL_AUTO` | `update` | **En prod DEBE ser `validate`** — nunca dejar que Hibernate toque el esquema solo en producción |
-| `SHOW_SQL` | `true` | Apagar en prod |
-| `JWT_SECRET` | valor dev-only en el yaml, comentado como NO usar en real | **Generar nuevo con `openssl rand -base64 64` para Railway** — el original quedó expuesto en git history (purgado 2026-07-07, pero por las dudas nunca reusar) |
+| `SHOW_SQL` | `false` | `true` solo en dev para depurar queries (fix deep-dive §5: default cambiado) |
+| `JWT_SECRET` | valor dev-only en el yaml, comentado como NO usar en real | En prod es un secret generado con `openssl rand -base64 64` — el original quedó expuesto en git history (purgado 2026-07-07, pero por las dudas nunca reusar) |
 | `JWT_EXPIRATION` | 86400000 (24h) | |
+| `JWT_INCLUDE_TOKEN_IN_RESPONSE` | `true` | Opción C del fix deep-dive §4; `false` cuando se use cookie httpOnly exclusivamente |
+| `REVEAL_EMAIL_EXISTS` | `false` | `true` solo si el contexto justifica priorizar UX sobre el threat model (decisión 07-16) |
+| `ALLOWED_ORIGINS` | `http://localhost:3000` | En Railway: URL(s) real(es) del frontend separadas por coma |
+| `SWAGGER_ENABLED` | `false` | `true` solo en dev/staging para la UI de Swagger (gateado, fix §2) |
+| `APP_DEBUG_HEADERS_ENABLED` | `false` | Endpoint de diagnóstico temporal `/api/v1/debug/headers` (fix 2.2) |
+| `APP_CHAT_ENABLED` | `true` | Kill-switch del chatbot; `false` → 503 |
+| `APP_CHAT_PROVIDER` | `gemini` | `gemini` \| `anthropic` — cambiar solo esta property |
+| `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` | placeholder dev-only | En prod: API key real del proveedor activo |
+| `RESEND_API_KEY` | placeholder dev-only | En prod: key real de Resend |
+| `EMAIL_FROM`, `EMAIL_AVISO_VENTANA_DIAS`, `EMAIL_CTA_BASE_URL`, `EMAIL_AVISO_ENABLED`, `EMAIL_AVISO_CRON` | `no-reply@gymflow.com` / 7 / `http://localhost:3000` / `true` / `0 0 9 * * *` | Notificaciones de vencimiento (ver §2.11). `EMAIL_CTA_BASE_URL` debe coincidir con `NEXT_PUBLIC_APP_ORIGIN` |
+| `MAX_HTTP_REQUEST_HEADER_SIZE`, `MAX_HTTP_FORM_POST_SIZE`, `MAX_SWALLOW_SIZE` | 8KB / 2MB / 2MB | Límites del hallazgo 3.4 |
+| `ERROR_INCLUDE_STACKTRACE` / `_MESSAGE` / `_BINDING_ERRORS` | `never` | Sin stack traces ni mensajes internos en errores (hallazgo 3.6) |
 | `SECURITY_LOG_LEVEL` | TRACE | Bajar a WARN en prod |
-| `SPRING_PROFILES_ACTIVE` | (ninguno → `default`) | **Setear a `prod` en Railway** para logs JSON |
+| `SPRING_PROFILES_ACTIVE` | (ninguno → `default`) | **`prod` en Railway** para logs JSON (logstash-logback-encoder) |
 | `HEALTH_SHOW_DETAILS` | `when-authorized` | |
 
 ### Frontend
 
 | Variable | Notas |
 |---|---|
-| `BACKEND_URL` | URL del backend, server-side only |
-| `NEXT_PUBLIC_API_URL` | Mencionado en roadmap de deploy, verificar uso exacto en `lib/api.ts` |
+| `BACKEND_URL` | URL del backend, server-side only (route handlers + proxy) |
+| `NEXT_PUBLIC_APP_ORIGIN` | Origen esperado para validar `Origin` en el proxy (defensa CSRF, THREAT_MODEL §2.5). En Railway: URL pública del frontend |
 
 ### GitHub Actions (secrets)
 
 | Secret | Usado en | Estado |
 |---|---|---|
-| `PROD_DATABASE_URL` | `.github/workflows/backup.yml` | **Pendiente** — configurar cuando exista Railway (usar `DATABASE_PUBLIC_URL`, no la interna) |
+| `PROD_DATABASE_URL` | `.github/workflows/backup.yml` | **Configurado y en producción** — backups diarios corriendo desde 2026-07-26 (usar `DATABASE_PUBLIC_URL` de Railway) |
 
 ---
 
@@ -385,41 +501,71 @@ tests, no solo que el código de producción compile.
 
 ## 7. Pendientes conocidos (con contexto de por qué)
 
-1. **Migración a Spring Boot 4.x** (PRs Dependabot #4 y #7) — programada
-   como sesión dedicada aparte, NO mezclar con otro trabajo. Riesgos
-   catalogados: starters modulares, Spring Security 7 (config explícita),
-   `@MockBean`/`@SpyBean` removidos (afecta los 16 tests), Jackson 3
-   (revisar serialización de `BigDecimal`).
+Estado al 2026-08-01. Los pendientes históricos de abajo (migración a Boot 4
+y deploy a Railway) están **cerrados**; quedan pocos ítems de verificación y
+mejoras opcionales.
 
-2. **Concurrencia y manejo de fallos** (Fase 5) — **parcialmente resuelto**.
-   `Suscripcion` ya tiene `@Version` + índice único parcial (ver §6.1).
-   **Sigue pendiente**: timeouts/circuit breakers hacia Postgres/Redis —
-   propuesta encargada a Codex, sin completar aún (Codex sin disponibilidad
-   hasta 2026-07-17, ver `collab/MAPA.md` para estado actualizado).
+1. **Verificar `requirepass` de Redis en Railway prod** — único pendiente de
+   seguridad activo; requiere consola de la plataforma (ver `THREAT_MODEL.md`
+   §1.1). No es trabajo de código.
 
-3. **Deploy a Railway** — checklist conocido:
-   - Actualizar `CorsConfigurationSource` en `SecurityConfig.java` con el
-     dominio real del frontend (hoy hardcodeado a `localhost:3000`)
-   - Generar `JWT_SECRET` real con `openssl rand -base64 64`
-   - Setear `NEXT_PUBLIC_API_URL` y `BACKEND_URL`
-   - Setear `SPRING_PROFILES_ACTIVE=prod` (logging JSON)
-   - Setear `DDL_AUTO=validate` (nunca `update` en prod)
-   - Configurar secret `PROD_DATABASE_URL` en GitHub para activar el backup
-     automático (usar la connection string pública de Railway)
-   - Considerar activar PITR nativo de Railway si en algún momento se paga
-     el plan Pro (mejora directa sobre el backup diario actual)
+2. **Alinear Postgres dev/CI/prod** — Railway corre Postgres 18, el
+   `docker-compose.yml` local sigue en 16. El backup de CI ya usa el cliente
+   18; subir dev a 18 elimina la divergencia latente de comportamiento
+   (ver `.github/workflows/backup.yml`).
 
-4. **`gzip` no disponible por defecto en PowerShell de Windows** — el script
+3. **CSP completa con nonce (M2)** — mejora opcional de portafolio, diferida
+   2026-08-01: ampliar `script-src`/`object-src`/`base-uri` con nonce.
+   Requiere testeo real con los scripts inline de Next.
+
+4. **Housekeeping de dependencias frontend** — bumps pendientes sin impacto
+   en seguridad: `eslint-config-next 16.2.10→16.2.12`, `@types/react 19.2.18`,
+   `@types/react-dom 19.2.4`, `@vitejs/plugin-react 6.0.5`.
+
+5. **Checklist pre-repo-público** — revisar triggers de los workflows y qué
+   secrets ve cada uno (`THREAT_MODEL.md` §4.4), y verificar el estado de
+   commits colgantes tras el force-push del 07-07.
+
+6. **Rotar credenciales filtradas en un chat de sesión** — API key de Gemini
+   y un token `gho_` de GitHub expuestos en conversación (no en el repo). No
+   urgente, pero vale la pena rotarlas.
+
+7. **`DiagnosticHeaderController`** (`/api/v1/debug/headers`) — temporal del
+   fix 2.2, gateado por `APP_DEBUG_HEADERS_ENABLED` (default false);
+   candidato a eliminación cuando cumpla su función.
+
+8. **User journeys sin verificar en producción** — viajes 3 y 4 de
+   `docs/USER_JOURNEYS.md`; decidir si hace falta el endpoint de cambio de
+   rol (hoy solo SQL directo).
+
+9. **`gzip` no disponible por defecto en PowerShell de Windows** — el script
    `backup-local.ps1` cae a dejar el `.sql` sin comprimir si no detecta
    `gzip` en el PATH. No es un bug, es el comportamiento de respaldo
    diseñado a propósito, pero vale la pena instalar Git Bash/WSL si se
    quiere compresión real en los backups locales.
 
-5. **`py`/`python` no quedaron en el PATH del sistema** tras la instalación
-   vía winget en la máquina de desarrollo — se invocan con ruta completa
-   (`%LOCALAPPDATA%\Microsoft\WindowsApps\py.exe`) o `py -m <módulo>`.
-   Pendiente menor: arreglar el PATH vía GUI de variables de entorno si se
-   quiere volver a necesitar Python/pip cómodamente.
+10. **`py`/`python` no quedaron en el PATH del sistema** tras la instalación
+    vía winget en la máquina de desarrollo — se invocan con ruta completa
+    (`%LOCALAPPDATA%\Microsoft\WindowsApps\py.exe`) o `py -m <módulo>`.
+    Pendiente menor: arreglar el PATH vía GUI de variables de entorno si se
+    quiere volver a necesitar Python/pip cómodamente.
+
+### Cerrados desde la última actualización de este documento
+
+- **Migración a Spring Boot 4.1.0** + springdoc 3.0.3 — completada
+  2026-07-26 (PRs Dependabot #4/#7). Riesgos que se materializaron y se
+  resolvieron: Spring Security 7 (`DaoAuthenticationProvider` con
+  constructor explícito), `@MockBean`→`@MockitoBean`, `TestRestTemplate`
+  movido a artefacto modular (`spring-boot-resttestclient`).
+- **Deploy a Railway** — backend y frontend en producción con demos en vivo;
+  CORS vía `ALLOWED_ORIGINS`, `JWT_SECRET` real, `BACKEND_URL` +
+  `NEXT_PUBLIC_APP_ORIGIN`, `SPRING_PROFILES_ACTIVE=prod`, `DDL_AUTO=validate`
+  (supuesto operativo: verificar en consola), backup `PROD_DATABASE_URL`
+  activo.
+- **Timeouts a clientes externos** — pendiente de la Fase 5 original:
+  aplicados 2026-08-01 (fix M1, connect 3s/read 30s en Gemini/Anthropic/
+  Resend). Circuit breakers hacia Postgres/Redis siguen fuera de scope para
+  un proyecto de portafolio con una instancia.
 
 ---
 
@@ -437,9 +583,10 @@ ambos lados.
 plan, estados) siempre aparecen en la respuesta aunque el conteo sea cero,
 para que el frontend no tenga que manejar campos faltantes.
 
-**Pendiente**: integrar el componente real de GLM con el endpoint (hoy el
-componente usa datos mock), y decidir si se agrega `recharts` como
-dependencia nueva (~150KB gzip, sin instalar todavía).
+**Estado**: integrado con el endpoint real desde 2026-07-13
+(`AdminDashboardCharts.tsx` con datos reales, `recharts` agregado como
+dependencia) — la nota "pendiente" de la propuesta original de GLM quedó
+vieja.
 
 ## 8. Decisiones de diseño (el "por qué", no solo el "qué")
 
@@ -463,3 +610,15 @@ dependencia nueva (~150KB gzip, sin instalar todavía).
   defensa en profundidad — si alguien agrega un endpoint nuevo y se olvida
   de la regla en `SecurityConfig`, el `@PreAuthorize` en el controller
   igual protege.
+- **Chat LLM con proveedor externo del tier gratis, blindado en vez de
+  removido** (2026-08-01): el riesgo real (el usuario pega PII y el proveedor
+  entrena con el tráfico) se cierra con filtro de emails previo al proveedor
+  + aviso en UI + prompt endurecido, sin sacrificar la feature de portafolio.
+  Kill-switch `APP_CHAT_ENABLED` para apagarlo en prod sin redeploy.
+- **Email vía HTTP directo con `RestClient` (patrón `client/`), sin SDK**:
+  cero dependencias nuevas para Resend — mismo criterio que el chat. El
+  scheduler diario va gateado por config para que los tests no disparen
+  correos reales.
+- **`sessionStorage` para el chat, no `localStorage`**: la conversación
+  sobrevive a un reload pero muere al cerrar la pestaña — coherente con una
+  sesión de soporte puntual y más conservador en privacidad.
