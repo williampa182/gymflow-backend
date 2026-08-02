@@ -12,6 +12,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -20,6 +21,15 @@ import org.springframework.web.bind.annotation.*;
 public class SuscripcionController {
 
     private final SuscripcionService suscripcionService;
+
+    @GetMapping("/mis")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Page<SuscripcionResponseDTO>> listarPropias(
+            Authentication authentication,
+            @PageableDefault(size = 20, sort = "id") Pageable pageable) {
+        return ResponseEntity.ok(
+                suscripcionService.listarPorUsuarioEmail(authentication.getName(), pageable));
+    }
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")

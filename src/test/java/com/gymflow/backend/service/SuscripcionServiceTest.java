@@ -150,4 +150,35 @@ class SuscripcionServiceTest {
         assertThat(resultado.getContent()).hasSize(1);
         assertThat(resultado.getContent().get(0).getNombreUsuario()).isEqualTo("William Admin");
     }
+
+    @Test
+    @SuppressWarnings("null")
+    void listarPorUsuarioEmail_retornaSoloLasSuscripcionesDelUsuarioAutenticado() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(usuarioRepository.findByEmail("william@gymflow.com")).thenReturn(Optional.of(usuario));
+        when(suscripcionRepository.findByUsuarioId(1L, pageable))
+                .thenReturn(new PageImpl<>(List.of(suscripcion)));
+
+        Page<SuscripcionResponseDTO> resultado = suscripcionService
+                .listarPorUsuarioEmail("william@gymflow.com", pageable);
+
+        assertThat(resultado.getContent()).singleElement()
+                .extracting(SuscripcionResponseDTO::getUsuarioId)
+                .isEqualTo(1L);
+        verify(suscripcionRepository).findByUsuarioId(1L, pageable);
+        verify(usuarioRepository).findByEmail("william@gymflow.com");
+    }
+
+    @Test
+    void listarPorUsuarioEmail_usuarioInexistente_lanzaExcepcion() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(usuarioRepository.findByEmail("desconocido@gymflow.com")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> suscripcionService
+                .listarPorUsuarioEmail("desconocido@gymflow.com", pageable))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Usuario no encontrado con email");
+
+        verifyNoInteractions(suscripcionRepository);
+    }
 }

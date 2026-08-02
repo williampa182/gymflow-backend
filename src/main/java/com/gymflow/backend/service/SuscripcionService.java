@@ -65,6 +65,14 @@ public class SuscripcionService {
                 .map(this::toDTO);
     }
 
+    public Page<SuscripcionResponseDTO> listarPorUsuarioEmail(String email, Pageable pageable) {
+        Usuario usuario = usuarioRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con email: " + email));
+
+        return suscripcionRepository.findByUsuarioId(usuario.getId(), pageable)
+                .map(this::toDTO);
+    }
+
     public Page<SuscripcionResponseDTO> listarPorEstado(EstadoSuscripcion estado, Pageable pageable) {
         Page<Suscripcion> suscripciones = (estado != null)
                 ? suscripcionRepository.findByEstado(estado, pageable)
