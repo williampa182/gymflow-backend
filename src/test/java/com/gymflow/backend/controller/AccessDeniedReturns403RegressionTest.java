@@ -78,7 +78,7 @@ class AccessDeniedReturns403RegressionTest {
         String token = registrarClienteYTomarToken();
         ResponseEntity<String> response = pegarEndpointAdminConToken(token, "/api/usuarios");
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-        assertThat(response.getBody()).contains("No tenés permisos");
+        assertThat(response.getBody()).contains("No tienes permisos");
     }
 
     @Test
@@ -87,6 +87,6 @@ class AccessDeniedReturns403RegressionTest {
         ResponseEntity<String> response = pegarEndpointAdminConToken(
                 token, "/api/dashboard/admin/estadisticas");
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-        assertThat(response.getBody()).contains("No tenés permisos");
+        assertThat(response.getBody()).contains("No tienes permisos");
     }
 }

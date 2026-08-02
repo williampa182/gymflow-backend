@@ -9,6 +9,7 @@ import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -52,6 +53,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<Map<String, Object>> handleConstraintViolation(ConstraintViolationException ex) {
+        return build(HttpStatus.BAD_REQUEST, "Datos inválidos", null);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleUnreadableMessage(HttpMessageNotReadableException ex) {
         return build(HttpStatus.BAD_REQUEST, "Datos inválidos", null);
     }
 
@@ -103,7 +109,7 @@ public class GlobalExceptionHandler {
         // el mensaje -> 500 "Error interno inesperado" en vez de 403, y se
         // logueaba como error real en cada intento denegado (ver
         // collab/aplicado/2026-08-01-fix-access-denied-403.md).
-        return build(HttpStatus.FORBIDDEN, "No tenés permisos para realizar esta acción", null);
+        return build(HttpStatus.FORBIDDEN, "No tienes permisos para realizar esta acción", null);
     }
 
     @ExceptionHandler(RuntimeException.class)
@@ -134,8 +140,9 @@ public class GlobalExceptionHandler {
         // semánticamente un conflicto de recurso -> 409, no 500. Sin este match caía
         // en INTERNAL_SERVER_ERROR: status incorrecto, mensaje pisado, y logueado
         // como error real en cada intento de registro duplicado.
-        if (m.contains("si ya tenés una cuenta")) return HttpStatus.CONFLICT;
+        if (m.contains("si ya tienes una cuenta")) return HttpStatus.CONFLICT;
         if (m.contains("solo se pueden")) return HttpStatus.BAD_REQUEST;
+        if (m.contains("propio rol") || m.contains("admin activo")) return HttpStatus.BAD_REQUEST;
         return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 
