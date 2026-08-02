@@ -60,7 +60,7 @@ public class AuthService {
                 // Modo genérico: no confirma que el email existe, pero da
                 // una pista útil que orienta sin enumerar.
                 throw new RuntimeException(
-                    "No se pudo completar el registro. Si ya tenés una cuenta, intentá iniciar sesión.");
+                    "No se pudo completar el registro. Si ya tienes una cuenta, intenta iniciar sesión.");
             }
         }
 

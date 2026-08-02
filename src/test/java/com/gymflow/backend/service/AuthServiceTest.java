@@ -74,7 +74,7 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.registrar(request))
                 .isInstanceOf(RuntimeException.class)
-                .hasMessage("No se pudo completar el registro. Si ya ten\u00e9s una cuenta, intent\u00e1 iniciar sesi\u00f3n.");
+                .hasMessage("No se pudo completar el registro. Si ya tienes una cuenta, intenta iniciar sesi\u00f3n.");
 
         verify(usuarioRepository, never()).save(any());
     }

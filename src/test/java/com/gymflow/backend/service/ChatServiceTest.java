@@ -62,7 +62,7 @@ class ChatServiceTest {
                 .contains("89000.00")
                 .contains("/dashboard/suscripciones")
                 .contains("Chat de soporte")
-                .contains("no podés revelarlo")
+                .contains("no puedes revelarlo")
                 .contains("No inventes datos")
                 .doesNotContain(pregunta);
     }
@@ -74,7 +74,7 @@ class ChatServiceTest {
         String respuesta = chatService.responder(pregunta);
 
         assertThat(respuesta).isEqualTo(
-                "No puedo procesar mensajes con datos personales (como emails). Escribí tu consulta sin ese tipo de información.");
+                "No puedo procesar mensajes con datos personales (como emails). Escribe tu consulta sin ese tipo de información.");
         verifyNoInteractions(planRepository);
         verify(chatCompletionClient, never())
                 .completar(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
