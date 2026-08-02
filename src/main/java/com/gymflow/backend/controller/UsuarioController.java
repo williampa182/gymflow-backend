@@ -1,8 +1,10 @@
 package com.gymflow.backend.controller;
 
+import com.gymflow.backend.dto.request.CambioRolRequest;
 import com.gymflow.backend.dto.UsuarioResponseDTO;
 import com.gymflow.backend.model.enums.Rol;
 import com.gymflow.backend.service.UsuarioService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -24,6 +26,14 @@ public class UsuarioController {
             @RequestParam(required = false) Rol rol,
             @PageableDefault(size = 20, sort = "id") Pageable pageable) {
         return ResponseEntity.ok(usuarioService.listarUsuarios(rol, pageable));
+    }
+
+    @PatchMapping("/{id}/rol")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<UsuarioResponseDTO> cambiarRol(
+            @PathVariable Long id,
+            @Valid @RequestBody CambioRolRequest request) {
+        return ResponseEntity.ok(usuarioService.cambiarRol(id, request.getRol()));
     }
 
     @PatchMapping("/{id}/estado")
