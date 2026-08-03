@@ -1,5 +1,6 @@
 package com.gymflow.backend.controller;
 
+import com.gymflow.backend.dto.HistorialAcompanamientoDTO;
 import com.gymflow.backend.dto.MiEntrenadorDTO;
 import com.gymflow.backend.service.EntrenadorService;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,5 +63,18 @@ class EntrenadorControllerTest {
 
         assertThat(respuesta.getStatusCode().value()).isEqualTo(200);
         assertThat(respuesta.getBody()).isSameAs(dto);
+    }
+
+    @Test
+    void miHistorial_usaElEmailDelPrincipal() {
+        HistorialAcompanamientoDTO entrada = new HistorialAcompanamientoDTO(7L, "Coach Ana", true, null);
+        when(authentication.getName()).thenReturn("beto@gymflow.test");
+        when(entrenadorService.miHistorial("beto@gymflow.test")).thenReturn(List.of(entrada));
+
+        List<HistorialAcompanamientoDTO> respuesta = entrenadorController.miHistorial(authentication);
+
+        assertThat(respuesta).containsExactly(entrada);
+        verify(entrenadorService).miHistorial("beto@gymflow.test");
+        verifyNoMoreInteractions(entrenadorService);
     }
 }

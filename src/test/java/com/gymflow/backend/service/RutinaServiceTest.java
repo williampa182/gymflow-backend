@@ -1,5 +1,6 @@
 package com.gymflow.backend.service;
 
+import com.gymflow.backend.dto.ClienteAsignadoDTO;
 import com.gymflow.backend.dto.EjercicioRequestDTO;
 import com.gymflow.backend.dto.RutinaRequestDTO;
 import com.gymflow.backend.dto.RutinaResponseDTO;
@@ -65,6 +66,22 @@ class RutinaServiceTest {
                 .build();
         request = new RutinaRequestDTO("Full Body", "Arranque",
                 List.of(new EjercicioRequestDTO(null, "Press banca", 3, 10)));
+    }
+
+    @Test
+    void listarMias_pueblaAsignadosPorRutina() {
+        AsignacionRutina asignacion = AsignacionRutina.builder()
+                .id(1L).cliente(cliente).rutina(rutina).build();
+        when(usuarioRepository.findByEmail("ana@gymflow.test")).thenReturn(Optional.of(entrenador));
+        when(rutinaRepository.findByEntrenadorIdOrderByCreadoEnDesc(1L)).thenReturn(List.of(rutina));
+        when(asignacionRutinaRepository.findByRutinaEntrenadorId(1L)).thenReturn(List.of(asignacion));
+
+        List<RutinaResponseDTO> rutinas = rutinaService.listarMias("ana@gymflow.test");
+
+        assertThat(rutinas).hasSize(1);
+        assertThat(rutinas.getFirst().asignados())
+                .extracting(ClienteAsignadoDTO::id, ClienteAsignadoDTO::nombre)
+                .containsExactly(tuple(2L, "Cliente Beto"));
     }
 
     @Test

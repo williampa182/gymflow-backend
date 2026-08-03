@@ -25,6 +25,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -69,18 +70,18 @@ class EntrenadorServiceTest {
                 .thenReturn(List.of());
         when(usuarioRepository.findByRolAndActivo(Rol.CLIENTE, true))
                 .thenReturn(List.of(clienteElegible, sinPlan));
-        when(suscripcionRepository.findByUsuarioIdAndEstado(2L, EstadoSuscripcion.ACTIVA))
-                .thenReturn(Optional.of(Suscripcion.builder()
+        when(suscripcionRepository.findByEstadoAndUsuarioIdIn(EstadoSuscripcion.ACTIVA, List.of(2L, 3L)))
+                .thenReturn(List.of(Suscripcion.builder()
                         .usuario(clienteElegible).plan(planConAcompañamiento)
                         .fechaInicio(LocalDate.now()).estado(EstadoSuscripcion.ACTIVA).build()));
-        when(suscripcionRepository.findByUsuarioIdAndEstado(3L, EstadoSuscripcion.ACTIVA))
-                .thenReturn(Optional.empty());
 
         List<ClienteElegibleDTO> elegibles = entrenadorService.listarClientesElegibles("ana@gymflow.test");
 
         assertThat(elegibles).hasSize(1);
         assertThat(elegibles.getFirst().nombre()).isEqualTo("Cliente Beto");
         assertThat(elegibles.getFirst().yaAcompaño()).isFalse();
+        // Una sola query por lotes de suscripciones: sin N+1 por cliente.
+        verify(suscripcionRepository, never()).findByUsuarioIdAndEstado(anyLong(), any());
     }
 
     @Test
@@ -91,8 +92,8 @@ class EntrenadorServiceTest {
         when(asignacionEntrenadorRepository.findByEntrenadorIdAndActivaTrueOrderByAsignadoEnDesc(1L))
                 .thenReturn(List.of(asignacion));
         when(usuarioRepository.findByRolAndActivo(Rol.CLIENTE, true)).thenReturn(List.of(clienteElegible));
-        when(suscripcionRepository.findByUsuarioIdAndEstado(2L, EstadoSuscripcion.ACTIVA))
-                .thenReturn(Optional.of(Suscripcion.builder()
+        when(suscripcionRepository.findByEstadoAndUsuarioIdIn(EstadoSuscripcion.ACTIVA, List.of(2L)))
+                .thenReturn(List.of(Suscripcion.builder()
                         .usuario(clienteElegible).plan(planConAcompañamiento)
                         .fechaInicio(LocalDate.now()).estado(EstadoSuscripcion.ACTIVA).build()));
 
@@ -173,5 +174,27 @@ class EntrenadorServiceTest {
                 .hasMessageContaining("solo el entrenador de la asignación");
 
         verify(asignacionEntrenadorRepository, never()).save(any());
+    }
+
+    @Test
+    void miHistorial_devuelveTodasLasAsignacionesDelCliente_masRecientePrimero() {
+        Usuario beto = Usuario.builder().id(2L).nombre("Cliente Beto").email("beto@gymflow.test")
+                .rol(Rol.CLIENTE).activo(true).build();
+        Usuario otroEntrenador = Usuario.builder().id(9L).nombre("Coach Leo").rol(Rol.ENTRENADOR).activo(true).build();
+        AsignacionEntrenador activa = AsignacionEntrenador.builder()
+                .id(7L).cliente(beto).entrenador(entrenador).activa(true).build();
+        AsignacionEntrenador cancelada = AsignacionEntrenador.builder()
+                .id(6L).cliente(beto).entrenador(otroEntrenador).activa(false).build();
+        when(usuarioRepository.findByEmail("beto@gymflow.test")).thenReturn(Optional.of(beto));
+        when(asignacionEntrenadorRepository.findByClienteIdOrderByAsignadoEnDesc(2L))
+                .thenReturn(List.of(activa, cancelada));
+
+        var historial = entrenadorService.miHistorial("beto@gymflow.test");
+
+        assertThat(historial).hasSize(2);
+        assertThat(historial.getFirst().entrenadorNombre()).isEqualTo("Coach Ana");
+        assertThat(historial.getFirst().activa()).isTrue();
+        assertThat(historial.get(1).entrenadorNombre()).isEqualTo("Coach Leo");
+        assertThat(historial.get(1).activa()).isFalse();
     }
 }

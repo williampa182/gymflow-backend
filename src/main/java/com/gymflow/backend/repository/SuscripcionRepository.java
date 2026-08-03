@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +21,14 @@ public interface SuscripcionRepository extends JpaRepository<Suscripcion, Long> 
     List<Suscripcion> findByEstado(EstadoSuscripcion estado);
     Page<Suscripcion> findByEstado(EstadoSuscripcion estado, Pageable pageable);
     Optional<Suscripcion> findByUsuarioIdAndEstado(Long usuarioId, EstadoSuscripcion estado);
+
+    /**
+     * Suscripciones ACTIVAS de un conjunto de usuarios en una sola query
+     * (aplanar el N+1 de EntrenadorService.listarClientesElegibles). El
+     * índice único uq_suscripcion_activa_por_usuario garantiza a lo sumo
+     * una por usuario.
+     */
+    List<Suscripcion> findByEstadoAndUsuarioIdIn(EstadoSuscripcion estado, Collection<Long> usuarioIds);
 
     @Query("""
             select s.estado as estado, count(s) as cantidad

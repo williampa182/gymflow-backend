@@ -1,6 +1,7 @@
 package com.gymflow.backend.controller;
 
 import com.gymflow.backend.dto.ClienteElegibleDTO;
+import com.gymflow.backend.dto.HistorialAcompanamientoDTO;
 import com.gymflow.backend.dto.MiEntrenadorDTO;
 import com.gymflow.backend.service.EntrenadorService;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +17,8 @@ import java.util.List;
  * Acompañamiento (Fase 4):
  *   - ENTRENADOR: GET /api/entrenador/clientes-elegibles (listado calculado),
  *     POST /api/entrenador/asignarme/{clienteId}, DELETE /api/entrenador/{asignacionId}
- *   - CLIENTE:    GET /api/entrenador/mio (su acompañante actual)
+ *   - CLIENTE:    GET /api/entrenador/mio (su acompañante actual),
+ *     GET /api/entrenador/mi-historial (todas sus asignaciones, ACTIVAS y canceladas)
  * La identidad siempre sale del JWT; la elegibilidad es una regla derivada
  * (plan ACTIVO con incluyeEntrenadorPersonal), no una decisión manual.
  */
@@ -57,5 +59,11 @@ public class EntrenadorController {
         return entrenadorService.miEntrenador(authentication.getName())
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/mi-historial")
+    @PreAuthorize("hasRole('CLIENTE')")
+    public List<HistorialAcompanamientoDTO> miHistorial(Authentication authentication) {
+        return entrenadorService.miHistorial(authentication.getName());
     }
 }

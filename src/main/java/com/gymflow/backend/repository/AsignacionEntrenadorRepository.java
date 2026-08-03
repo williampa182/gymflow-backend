@@ -17,4 +17,11 @@ public interface AsignacionEntrenadorRepository extends JpaRepository<Asignacion
      * cancelarla (ownership verificado en EntrenadorService).
      */
     Optional<AsignacionEntrenador> findByIdAndEntrenadorId(Long id, Long entrenadorId);
+
+    /**
+     * Historial completo del cliente autenticado (miHistorial de
+     * EntrenadorService): asignaciones ACTIVAS y canceladas, más reciente
+     * primero.
+     */
+    List<AsignacionEntrenador> findByClienteIdOrderByAsignadoEnDesc(Long clienteId);
 }

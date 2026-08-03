@@ -321,3 +321,43 @@ personal, y les asignan rutinas. Decisiones y su racional:
   e `EntrenadorRutinaIntegrationTest` (flujo end-to-end contra Postgres
   real: registro → plan → suscripción → acompañamiento → rutina →
   asignación → lectura cliente + 409s duplicados + 403 de rol cruzado).
+
+### Iteración 2 (2026-08-03): quitar rutina en la UI + historial de acompañamientos
+
+Ampliación aprobada por William tras la fase 4 (propuesta
+`collab/propuestas/opencode/deepseek-v4-flash-free/2026-08-03-fase4-iteracion2-quitar-rutina-y-historial.md`):
+
+- **`asignados` en `RutinaResponseDTO` solo para ENTRENADOR**: `GET
+  /api/rutinas` (vista ENTRENADOR) puebla la lista de clientes asignados a
+  cada rutina; `GET /api/rutinas/mias` (vista CLIENTE) la devuelve siempre
+  vacía (`RutinaResponseDTO.from(rutina)` sin sobrecarga). El CLIENTE no
+  puede deducir qué otros clientes comparten una rutina — no filtra
+  identidades ajenas.
+- **Sin N+1 en ninguna de las dos listas**: `RutinaService.listarMias`
+  arma el mapa `rutinaId → asignados` con una sola query de
+  `AsignacionRutinaRepository.findByRutinaEntrenadorId` (con `join fetch
+  ar.cliente`, sin N+1 de nombres) y `EntrenadorService.listarClientesElegibles`
+  sigue usando una sola query de suscripciones ACTIVAS para todo el batch
+  de candidatos (`findByEstadoAndUsuarioIdIn`) en vez de una por cliente
+  (los chequeos per-cliente de `asignarme` se conservan, solo cambia la
+  lectura). Sin cache: el costo es 2 queries planas por petición.
+- **`GET /api/entrenador/mi-historial`** (CLIENTE, `@PreAuthorize`): todas
+  las asignaciones del cliente autenticado, más reciente primero,
+  `findByClienteIdOrderByAsignadoEnDesc`. Devuelve `HistorialAcompanamientoDTO`
+  (entrenadorNombre + activa + asignadoEn) — **nunca emails**. La identidad
+  sale de `authentication.getName()` (mismo patrón que Fase 3). El
+  frontend trata el fallo del endpoint como silencioso (la sección es
+  informativa, no bloquea la página).
+- **Quitar rutina por UI**: `DELETE /rutinas/{id}/asignar/{clienteId}`
+  existente (idempotente, ownership estricto) ahora es alcanzable desde dos
+  lugares con una sola fuente de datos (`rutinas[].asignados`): chip en la
+  card de la rutina y sub-fila del cliente acompañado.
+- **Tests**: `RutinaServiceTest` (asignados poblados con tuple
+  `(rutinaId, ClienteAsignadoDTO)`), `EntrenadorServiceTest` (batch
+  `findByEstadoAndUsuarioIdIn` + nunca `findByUsuarioIdAndEstado` por
+  cliente; historial completo del cliente), `EntrenadorControllerTest`
+  (historial usa el email del principal), `EntrenadorRutinaIntegrationTest`
+  (asignados en la vista ENTRENADOR, historial tras cancelar + volver a
+  acompañar, quitar rutina 204). Frontend: `rutinas-role.test.tsx` 8→11
+  (quitar desde card, quitar desde sub-fila, historial CLIENTE con
+  ACTIVO/CANCELADO).

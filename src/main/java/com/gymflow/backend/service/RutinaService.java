@@ -8,7 +8,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Rutinas de entrenamiento (Fase 4). Ownership estricto: las rutinas
@@ -28,8 +30,19 @@ public class RutinaService {
     @Transactional(readOnly = true)
     public List<RutinaResponseDTO> listarMias(String emailEntrenador) {
         Usuario entrenador = usuarioRepository.findByEmail(emailEntrenador).orElseThrow();
-        return rutinaRepository.findByEntrenadorIdOrderByCreadoEnDesc(entrenador.getId())
-                .stream().map(RutinaResponseDTO::from).toList();
+        List<Rutina> rutinas = rutinaRepository.findByEntrenadorIdOrderByCreadoEnDesc(entrenador.getId());
+        // Una sola query de asignaciones con cliente resuelto → mapa por
+        // rutina (evita N+1 al leer el nombre de cada cliente asignado).
+        Map<Long, List<ClienteAsignadoDTO>> asignadosPorRutina = new HashMap<>();
+        for (AsignacionRutina asignacion
+                : asignacionRutinaRepository.findByRutinaEntrenadorId(entrenador.getId())) {
+            asignadosPorRutina.computeIfAbsent(asignacion.getRutina().getId(), k -> new ArrayList<>())
+                    .add(ClienteAsignadoDTO.from(asignacion.getCliente()));
+        }
+        return rutinas.stream()
+                .map(rutina -> RutinaResponseDTO.from(rutina,
+                        asignadosPorRutina.getOrDefault(rutina.getId(), List.of())))
+                .toList();
     }
 
     @Transactional(readOnly = true)

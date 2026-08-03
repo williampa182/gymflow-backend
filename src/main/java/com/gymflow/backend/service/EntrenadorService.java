@@ -1,6 +1,7 @@
 package com.gymflow.backend.service;
 
 import com.gymflow.backend.dto.ClienteElegibleDTO;
+import com.gymflow.backend.dto.HistorialAcompanamientoDTO;
 import com.gymflow.backend.dto.MiEntrenadorDTO;
 import com.gymflow.backend.model.AsignacionEntrenador;
 import com.gymflow.backend.model.Suscripcion;
@@ -52,9 +53,18 @@ public class EntrenadorService {
             acompanados.put(asignacion.getCliente().getId(), asignacion);
         }
 
+        List<Usuario> clientesActivos = usuarioRepository.findByRolAndActivo(Rol.CLIENTE, true);
+        // Una sola query de suscripciones ACTIVAS para todos los candidatos
+        // → mapa por usuario (aplanado; antes era un query por cliente).
+        Map<Long, Suscripcion> activasPorCliente = new HashMap<>();
+        for (Suscripcion suscripcion : suscripcionRepository.findByEstadoAndUsuarioIdIn(
+                EstadoSuscripcion.ACTIVA, clientesActivos.stream().map(Usuario::getId).toList())) {
+            activasPorCliente.put(suscripcion.getUsuario().getId(), suscripcion);
+        }
+
         List<ClienteElegibleDTO> elegibles = new ArrayList<>();
-        for (Usuario cliente : usuarioRepository.findByRolAndActivo(Rol.CLIENTE, true)) {
-            if (tienePlanConEntrenadorPersonal(cliente.getId())) {
+        for (Usuario cliente : clientesActivos) {
+            if (tienePlanConEntrenadorPersonal(activasPorCliente.get(cliente.getId()))) {
                 elegibles.add(ClienteElegibleDTO.from(cliente, acompanados.get(cliente.getId())));
             }
         }
@@ -107,6 +117,25 @@ public class EntrenadorService {
         Usuario cliente = usuarioRepository.findByEmail(emailCliente).orElseThrow();
         return asignacionEntrenadorRepository.findByClienteIdAndActivaTrue(cliente.getId())
                 .map(MiEntrenadorDTO::from);
+    }
+
+    /**
+     * Historial completo de acompañamientos del cliente autenticado:
+     * asignaciones ACTIVAS y canceladas, más reciente primero. Nunca
+     * expone el email del entrenador.
+     */
+    @Transactional(readOnly = true)
+    public List<HistorialAcompanamientoDTO> miHistorial(String emailCliente) {
+        Usuario cliente = usuarioRepository.findByEmail(emailCliente).orElseThrow();
+        return asignacionEntrenadorRepository.findByClienteIdOrderByAsignadoEnDesc(cliente.getId())
+                .stream().map(HistorialAcompanamientoDTO::from).toList();
+    }
+
+    private boolean tienePlanConEntrenadorPersonal(Suscripcion activa) {
+        return activa != null
+                && activa.getPlan() != null
+                && activa.getPlan().isActivo()
+                && activa.getPlan().isIncluyeEntrenadorPersonal();
     }
 
     private boolean tienePlanConEntrenadorPersonal(Long clienteId) {

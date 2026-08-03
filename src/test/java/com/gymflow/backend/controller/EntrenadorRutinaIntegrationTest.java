@@ -1,6 +1,8 @@
 package com.gymflow.backend.controller;
 
+import com.gymflow.backend.dto.ClienteAsignadoDTO;
 import com.gymflow.backend.dto.ClienteElegibleDTO;
+import com.gymflow.backend.dto.HistorialAcompanamientoDTO;
 import com.gymflow.backend.dto.MiEntrenadorDTO;
 import com.gymflow.backend.dto.PlanRequestDTO;
 import com.gymflow.backend.dto.PlanResponseDTO;
@@ -49,7 +51,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * registro de roles → plan con acompañamiento → suscripción ACTIVA →
  * acompañamiento → rutina con ejercicios → asignación → lectura del
  * cliente. Incluye las barreras: duplicado de acompañamiento (409) y
- * rutina duplicada (409).
+ * rutina duplicada (409). Iteración 2: asignados por rutina en la vista
+ * del ENTRENADOR, quitar rutina y historial de acompañamientos.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureTestRestTemplate
@@ -89,8 +92,10 @@ class EntrenadorRutinaIntegrationTest {
                     .ifPresent(asignacionRutinaRepository::delete);
             rutinaRepository.deleteById(rutinaId);
         }
-        asignacionEntrenadorRepository.findByClienteIdAndActivaTrue(clienteId)
-                .ifPresent(asignacionEntrenadorRepository::delete);
+        // Puede haber varias asignaciones (activas y canceladas) por el
+        // historial; se limpian todas.
+        asignacionEntrenadorRepository.findByClienteIdOrderByAsignadoEnDesc(clienteId)
+                .forEach(asignacionEntrenadorRepository::delete);
         if (suscripcionId != null) {
             suscripcionRepository.deleteById(suscripcionId);
         }
@@ -184,6 +189,65 @@ class EntrenadorRutinaIntegrationTest {
         // El cliente NO puede listar las rutinas del entrenador (barrera de rol).
         ResponseEntity<Map> prohibido = get("/api/rutinas", cliente.getToken(), Map.class);
         assertThat(prohibido.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+
+        // El ENTRENADOR ve la rutina con el cliente asignado (iteración 2).
+        ResponseEntity<RutinaResponseDTO[]> rutinasEntrenador = get(
+                "/api/rutinas", entrenador.getToken(), RutinaResponseDTO[].class);
+        assertThat(rutinasEntrenador.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(rutinasEntrenador.getBody()).hasSize(1);
+        assertThat(rutinasEntrenador.getBody()[0].asignados())
+                .extracting(ClienteAsignadoDTO::nombre)
+                .contains("Cliente Fase4");
+
+        // Historial del cliente: una asignación ACTIVA (iteración 2).
+        ResponseEntity<HistorialAcompanamientoDTO[]> historial = get(
+                "/api/entrenador/mi-historial", cliente.getToken(),
+                HistorialAcompanamientoDTO[].class);
+        assertThat(historial.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(historial.getBody()).hasSize(1);
+        assertThat(historial.getBody()[0].activa()).isTrue();
+        assertThat(historial.getBody()[0].entrenadorNombre()).isEqualTo("Entrenador Fase4");
+
+        // Quitar la rutina al cliente → el cliente deja de verla.
+        ResponseEntity<Void> quitada = delete(
+                "/api/rutinas/" + rutinaId + "/asignar/" + clienteId, entrenador.getToken(), Void.class);
+        assertThat(quitada.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        ResponseEntity<RutinaResponseDTO[]> sinRutinas = get(
+                "/api/rutinas/mias", cliente.getToken(), RutinaResponseDTO[].class);
+        assertThat(sinRutinas.getBody()).isEmpty();
+
+        // Re-asignar la rutina, cancelar el acompañamiento y volver a
+        // acompañar → el historial registra la cancelación (activa=false)
+        // debajo de la asignación ACTIVA más reciente.
+        ResponseEntity<Void> reasignada = post(
+                "/api/rutinas/" + rutinaId + "/asignar/" + clienteId, entrenador.getToken(), null, Void.class);
+        assertThat(reasignada.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        Long asignacionId = java.util.Arrays.stream(get(
+                "/api/entrenador/clientes-elegibles", entrenador.getToken(), ClienteElegibleDTO[].class).getBody())
+                .filter(elegible -> elegible.id().equals(clienteId))
+                .findFirst()
+                .orElseThrow()
+                .asignacionId();
+        ResponseEntity<Void> cancelada = delete(
+                "/api/entrenador/" + asignacionId, entrenador.getToken(), Void.class);
+        assertThat(cancelada.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+
+        ResponseEntity<HistorialAcompanamientoDTO[]> trasCancelar = get(
+                "/api/entrenador/mi-historial", cliente.getToken(),
+                HistorialAcompanamientoDTO[].class);
+        assertThat(trasCancelar.getBody()).hasSize(1);
+        assertThat(trasCancelar.getBody()[0].activa()).isFalse();
+
+        ResponseEntity<Void> nuevoAcompañamiento = post(
+                "/api/entrenador/asignarme/" + clienteId, entrenador.getToken(), null, Void.class);
+        assertThat(nuevoAcompañamiento.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<HistorialAcompanamientoDTO[]> trasReacompañar = get(
+                "/api/entrenador/mi-historial", cliente.getToken(),
+                HistorialAcompanamientoDTO[].class);
+        assertThat(trasReacompañar.getBody()).hasSize(2);
+        assertThat(trasReacompañar.getBody()[0].activa()).isTrue();
+        assertThat(trasReacompañar.getBody()[1].activa()).isFalse();
     }
 
     private AuthResponse registrar(String sufijo, String rol) {
@@ -256,5 +320,13 @@ class EntrenadorRutinaIntegrationTest {
         HttpEntity<?> entity = payload == null ? new HttpEntity<>(headers)
                 : new HttpEntity<>(payload, headers);
         return restTemplate.exchange(path, HttpMethod.POST, entity, responseType);
+    }
+
+    private <T> ResponseEntity<T> delete(String path, String token, Class<T> responseType) {
+        HttpHeaders headers = new HttpHeaders();
+        if (token != null) {
+            headers.setBearerAuth(token);
+        }
+        return restTemplate.exchange(path, HttpMethod.DELETE, new HttpEntity<>(headers), responseType);
     }
 }
