@@ -83,6 +83,7 @@ class AuthServiceTest {
     void registrar_emailDisponible_guardaClienteYRetornaTokenGenerado() {
         RegisterRequest request = registerRequest();
         when(usuarioRepository.existsByEmail(EMAIL)).thenReturn(false);
+        when(usuarioRepository.countByRolAndActivo(Rol.ADMIN, true)).thenReturn(1L);
         when(passwordEncoder.encode(RAW_PASSWORD)).thenReturn(CURRENT_COST_HASH);
         when(jwtUtil.generarToken(any(Usuario.class))).thenReturn("jwt-generado");
 
@@ -99,6 +100,84 @@ class AuthServiceTest {
         assertThat(response)
                 .extracting(AuthResponse::getToken, AuthResponse::getTipo, AuthResponse::getEmail, AuthResponse::getRol)
                 .containsExactly("jwt-generado", "Bearer", EMAIL, Rol.CLIENTE);
+    }
+
+    @Test
+    void registrar_conRolEntrenadorEnWhitelist_guardaEntrenador() {
+        RegisterRequest request = registerRequest();
+        request.setRol("ENTRENADOR");
+        when(usuarioRepository.existsByEmail(EMAIL)).thenReturn(false);
+        when(usuarioRepository.countByRolAndActivo(Rol.ADMIN, true)).thenReturn(1L);
+        when(passwordEncoder.encode(RAW_PASSWORD)).thenReturn(CURRENT_COST_HASH);
+        when(jwtUtil.generarToken(any(Usuario.class))).thenReturn("jwt-generado");
+
+        AuthResponse response = authService.registrar(request);
+
+        ArgumentCaptor<Usuario> usuarioCaptor = ArgumentCaptor.forClass(Usuario.class);
+        verify(usuarioRepository).save(usuarioCaptor.capture());
+        assertThat(usuarioCaptor.getValue().getRol()).isEqualTo(Rol.ENTRENADOR);
+        assertThat(response.getRol()).isEqualTo(Rol.ENTRENADOR);
+    }
+
+    @Test
+    void registrar_rolAdminEnElBody_nuncaEscalaYQuedaCliente() {
+        RegisterRequest request = registerRequest();
+        request.setRol("ADMIN");
+        when(usuarioRepository.existsByEmail(EMAIL)).thenReturn(false);
+        when(usuarioRepository.countByRolAndActivo(Rol.ADMIN, true)).thenReturn(1L);
+        when(passwordEncoder.encode(RAW_PASSWORD)).thenReturn(CURRENT_COST_HASH);
+        when(jwtUtil.generarToken(any(Usuario.class))).thenReturn("jwt-generado");
+
+        AuthResponse response = authService.registrar(request);
+
+        ArgumentCaptor<Usuario> usuarioCaptor = ArgumentCaptor.forClass(Usuario.class);
+        verify(usuarioRepository).save(usuarioCaptor.capture());
+        assertThat(usuarioCaptor.getValue().getRol()).isEqualTo(Rol.CLIENTE);
+        assertThat(response.getRol()).isEqualTo(Rol.CLIENTE);
+    }
+
+    @Test
+    void registrar_rolDesconocido_oMinusculas_seDegradaACliente() {
+        RegisterRequest request = registerRequest();
+        request.setRol("súper-VIP");
+        when(usuarioRepository.existsByEmail(EMAIL)).thenReturn(false);
+        when(usuarioRepository.countByRolAndActivo(Rol.ADMIN, true)).thenReturn(1L);
+        when(passwordEncoder.encode(RAW_PASSWORD)).thenReturn(CURRENT_COST_HASH);
+        when(jwtUtil.generarToken(any(Usuario.class))).thenReturn("jwt-generado");
+
+        authService.registrar(request);
+
+        ArgumentCaptor<Usuario> usuarioCaptor = ArgumentCaptor.forClass(Usuario.class);
+        verify(usuarioRepository).save(usuarioCaptor.capture());
+        assertThat(usuarioCaptor.getValue().getRol()).isEqualTo(Rol.CLIENTE);
+    }
+
+    @Test
+    void registrar_sinAdminsActivos_primerRegistroNaceAdmin_bootstrap() {
+        RegisterRequest request = registerRequest();
+        request.setRol("CLIENTE");
+        when(usuarioRepository.existsByEmail(EMAIL)).thenReturn(false);
+        when(usuarioRepository.countByRolAndActivo(Rol.ADMIN, true)).thenReturn(0L);
+        when(passwordEncoder.encode(RAW_PASSWORD)).thenReturn(CURRENT_COST_HASH);
+        when(jwtUtil.generarToken(any(Usuario.class))).thenReturn("jwt-generado");
+
+        AuthResponse response = authService.registrar(request);
+
+        ArgumentCaptor<Usuario> usuarioCaptor = ArgumentCaptor.forClass(Usuario.class);
+        verify(usuarioRepository).save(usuarioCaptor.capture());
+        assertThat(usuarioCaptor.getValue().getRol())
+                .as("sin ningún ADMIN activo, el primer registro nace ADMIN (bootstrap)")
+                .isEqualTo(Rol.ADMIN);
+        assertThat(response.getRol()).isEqualTo(Rol.ADMIN);
+    }
+
+    @Test
+    void elPrimerRegistroSeraAdmin_reflejaLaFaltaDeAdminsActivos() {
+        when(usuarioRepository.countByRolAndActivo(Rol.ADMIN, true)).thenReturn(0L);
+        assertThat(authService.elPrimerRegistroSeraAdmin()).isTrue();
+
+        when(usuarioRepository.countByRolAndActivo(Rol.ADMIN, true)).thenReturn(2L);
+        assertThat(authService.elPrimerRegistroSeraAdmin()).isFalse();
     }
 
     @Test

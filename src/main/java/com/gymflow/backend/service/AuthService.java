@@ -64,18 +64,50 @@ public class AuthService {
             }
         }
 
-        // Rol SIEMPRE forzado a CLIENTE en el registro público: nunca tomar
-        // el rol del input del cliente acá (ver comentario en RegisterRequest).
+        // Rol efectivo del auto-registro (Fase 2, 2026-08-02): el usuario
+        // puede pedir nacer ENTRENADOR, pero NUNCA ADMIN. resuelveRolRegistro
+        // aplica la whitelist y degrada todo lo demás a CLIENTE — preserva el
+        // fix de escalada §7.0 del security deep dive (ver
+        // AuthRegisterPrivilegeEscalationRegressionTest, que manda
+        // "rol":"ADMIN" y espera 200 + CLIENTE).
+        Rol rol = resolverRolRegistro(request.getRol());
+
+        // Bootstrap del primer admin (Fase 2; THREAT_MODEL): si el sistema no
+        // tiene ningún ADMIN activo, el primer usuario registrado nace ADMIN
+        // para poder configurar el panel desde cero, sin agregar usuarios a
+        // mano. Una vez que existe al menos un ADMIN activo, la whitelist de
+        // arriba manda y nadie más puede auto-escalar.
+        if (usuarioRepository.countByRolAndActivo(Rol.ADMIN, true) == 0) {
+            rol = Rol.ADMIN;
+        }
+
         Usuario usuario = Usuario.builder()
                 .nombre(request.getNombre())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
-                .rol(Rol.CLIENTE)
+                .rol(rol)
                 .build();
 
         usuarioRepository.save(usuario);
         String token = jwtUtil.generarToken(usuario);
         return buildResponse(token, usuario);
+    }
+
+    // Whitelist estricta del auto-registro (Fase 2). "CLIENTE"/"ENTRENADOR"
+    // pasan; cualquier otro valor —incluido "ADMIN"— o la ausencia caen a
+    // CLIENTE (least privilege: never auto-escalate).
+    private Rol resolverRolRegistro(String rolSolicitado) {
+        if (rolSolicitado != null && "ENTRENADOR".equalsIgnoreCase(rolSolicitado.trim())) {
+            return Rol.ENTRENADOR;
+        }
+        return Rol.CLIENTE;
+    }
+
+    // Indica si el próximo registro nacerá ADMIN (bootstrap del primer admin,
+    // Fase 2). Lo usa GET /api/auth/registro-estado para mostrar el mensaje
+    // condicional del formulario cuando el sistema arranca sin administradores.
+    public boolean elPrimerRegistroSeraAdmin() {
+        return usuarioRepository.countByRolAndActivo(Rol.ADMIN, true) == 0;
     }
 
     public AuthResponse login(LoginRequest request) {

@@ -3,6 +3,7 @@ package com.gymflow.backend.controller;
 import com.gymflow.backend.dto.request.LoginRequest;
 import com.gymflow.backend.dto.request.RegisterRequest;
 import com.gymflow.backend.dto.response.AuthResponse;
+import com.gymflow.backend.dto.response.RegistroEstadoDTO;
 import com.gymflow.backend.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,15 @@ public class AuthController {
     public ResponseEntity<AuthResponse> registrar(
             @Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.ok(authService.registrar(request));
+    }
+
+    // Fase 2: estado del auto-registro (bootstrap del primer admin). Público:
+    // el formulario de registro lo consulta para mostrar si el próximo
+    // registro nacerá ADMIN sin loguearse. No revela datos de usuarios.
+    @GetMapping("/registro-estado")
+    public ResponseEntity<RegistroEstadoDTO> estadoRegistro() {
+        return ResponseEntity.ok(
+                new RegistroEstadoDTO(authService.elPrimerRegistroSeraAdmin()));
     }
 
     @PostMapping("/login")

@@ -16,6 +16,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+
 @Service
 @RequiredArgsConstructor
 public class SuscripcionService {
@@ -53,6 +55,54 @@ public class SuscripcionService {
             // nivel de Postgres (ver scripts/migrations/001_unique_suscripcion_activa.sql
             // — TODAVÍA NO APLICADA, hay que correrla a mano). Sin esa
             // constraint, este catch no dispara y la carrera sigue abierta.
+            suscripcionRepository.save(suscripcion);
+        } catch (DataIntegrityViolationException e) {
+            throw new RuntimeException("El usuario ya tiene una suscripción activa");
+        }
+        return toDTO(suscripcion);
+    }
+
+    /**
+     * Self-service (Fase 3, POST /suscripciones/mi). A diferencia de
+     * {@link #crear(SuscripcionRequestDTO)}, la identidad del usuario NUNCA
+     * viene del body — llega el email del JWT resuelto en el controller.
+     * El pago es mock (demo de portafolio, sin pasarela): el POST simula la
+     * aprobación y activa la suscripción directo.
+     */
+    @SuppressWarnings("null")
+    @Transactional
+    public SuscripcionResponseDTO inscribir(String email, Long planId, LocalDate fechaInicio) {
+        Usuario usuario = usuarioRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con email: " + email));
+
+        Plan plan = planRepository.findById(planId)
+                .orElseThrow(() -> new RuntimeException("Plan no encontrado con id: " + planId));
+
+        // Defensa en profundidad: el frontend solo lista planes activos, pero
+        // acá se re-verifica — un plan inactivo no se puede autocomprar si el
+        // catálogo cambió entre el render y el POST (GlobalExceptionHandler
+        // mapea este mensaje a 409).
+        if (!plan.isActivo()) {
+            throw new RuntimeException("El plan no está disponible para inscribirse");
+        }
+
+        suscripcionRepository.findByUsuarioIdAndEstado(usuario.getId(), EstadoSuscripcion.ACTIVA)
+                .ifPresent(s -> { throw new RuntimeException("El usuario ya tiene una suscripción activa"); });
+
+        LocalDate inicio = fechaInicio != null ? fechaInicio : LocalDate.now();
+
+        Suscripcion suscripcion = Suscripcion.builder()
+                .usuario(usuario)
+                .plan(plan)
+                .fechaInicio(inicio)
+                .fechaFin(inicio.plusDays(plan.getDuracionDias()))
+                .estado(EstadoSuscripcion.ACTIVA)
+                .build();
+
+        try {
+            // Misma red de seguridad check-then-act que en crear(): espera la
+            // constraint única parcial 001_unique_suscripcion_activa.sql
+            // (TODAVÍA NO APLICADA) para cerrar la carrera a nivel BD.
             suscripcionRepository.save(suscripcion);
         } catch (DataIntegrityViolationException e) {
             throw new RuntimeException("El usuario ya tiene una suscripción activa");

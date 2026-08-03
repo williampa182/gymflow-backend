@@ -7,14 +7,16 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
- * DTO de registro público. A PROPÓSITO no incluye el campo `rol`:
- * un endpoint de registro público jamás debe permitir que el cliente
- * elija su propio rol (era una vulnerabilidad de escalada de
- * privilegios confirmada — cualquiera podía registrarse como ADMIN
- * mandando "rol":"ADMIN" en el body). Todo usuario que se registra
- * por acá queda como CLIENTE; promoverlo a ENTRENADOR/ADMIN es una
- * acción de administración separada (PATCH /api/usuarios/{id}/rol,
- * si se implementa) y no algo que el propio usuario controla.
+ * DTO de registro público. Campo `rol` OPCIONAL y limitado a la whitelist
+ * CLIENTE/ENTRENADOR (Fase 2, 2026-08-02): el usuario puede pedir nacer
+ * como entrenador, nunca como ADMIN.
+ *
+ * Regla de seguridad: este DTO NO valida `rol` con @Pattern a propósito.
+ * Cualquier valor no whitelistado (ausente, vacío, "ADMIN" o desconocido)
+ * se degrada a CLIENTE en AuthService — es el fix de escalada de privilegios
+ * §7.0 del security deep dive, cuyo test de regresión espera 200 + CLIENTE
+ * cuando el body manda "rol":"ADMIN". Forzar la validación convertiría esa
+ * respuesta en 400 y rompería el contrato que AuthRegisterPrivilegeEscalationRegressionTest verifica.
  */
 @Data
 public class RegisterRequest {
@@ -30,4 +32,7 @@ public class RegisterRequest {
     @Size(min = 12, max = 128, message = "La contraseña debe tener entre 12 y 128 caracteres")
     @NotCommonPassword
     private String password;
+
+    /** Whitelist para auto-registro: "CLIENTE" o "ENTRENADOR"; cualquier otro valor queda de lado del service. */
+    private String rol;
 }

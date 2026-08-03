@@ -133,7 +133,7 @@ public class GlobalExceptionHandler {
     private HttpStatus inferirStatus(String msg) {
         String m = msg.toLowerCase();
         if (m.contains("no encontrad")) return HttpStatus.NOT_FOUND;
-        if (m.contains("ya existe") || m.contains("ya tiene una suscripción")) return HttpStatus.CONFLICT;
+        if (m.contains("ya existe") || m.contains("ya tiene")) return HttpStatus.CONFLICT;
         // Mensaje genérico de AuthService cuando reveal-email-exists-on-register=false
         // (ver collab/aplicado/2026-07-16-decision-reveal-email-false.md). No contiene
         // "ya existe" a propósito (es el punto: no revelar), pero sigue siendo
@@ -142,7 +142,18 @@ public class GlobalExceptionHandler {
         // como error real en cada intento de registro duplicado.
         if (m.contains("si ya tienes una cuenta")) return HttpStatus.CONFLICT;
         if (m.contains("solo se pueden")) return HttpStatus.BAD_REQUEST;
+        // Fase 3: plan inactivo en el self-service POST /suscripciones/mi.
+        // El recurso pedido existe pero no está usable → 409, igual que el
+        // duplicado de suscripción activa.
+        if (m.contains("no está disponible")) return HttpStatus.CONFLICT;
         if (m.contains("propio rol") || m.contains("admin activo")) return HttpStatus.BAD_REQUEST;
+        // Fase 4: ownership de rutinas/asignaciones. El recurso existe pero
+        // no le pertenece a quien lo toca → 403, no 500 ni 404 (no revelar
+        // existencia no alcanza: el mensaje ya identifica la acción).
+        if (m.contains("solo podés") || m.contains("solo el entrenador")) return HttpStatus.FORBIDDEN;
+        // Fase 4: reglas de elegibilidad del acompañamiento (plan sin
+        // entrenador personal, auto-asignación, usuario no cliente).
+        if (m.contains("no podés ser tu propio") || m.contains("no incluye") || m.contains("no es un cliente")) return HttpStatus.BAD_REQUEST;
         return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 

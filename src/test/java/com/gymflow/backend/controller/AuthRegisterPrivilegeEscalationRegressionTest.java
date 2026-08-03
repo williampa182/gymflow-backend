@@ -10,6 +10,11 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import com.gymflow.backend.model.Usuario;
+import com.gymflow.backend.model.enums.Rol;
+import com.gymflow.backend.repository.UsuarioRepository;
 
 import java.util.Map;
 
@@ -21,14 +26,17 @@ import static org.assertj.core.api.Assertions.assertThat;
  * restricción server-side, permitiendo que cualquiera se registrara como
  * ADMIN con un solo POST sin autenticación previa.
  *
- * El fix actual (RegisterRequest sin campo `rol` + AuthService fuerza
- * Rol.CLIENTE) ya está cubierto indirectamente por AuthServiceTest, pero
- * ese es un test de unidad sobre el service, no ejercita el binding real
- * de JSON a través del controller. Este test manda el payload crudo tal
- * cual lo mandaría un atacante — incluyendo el campo "rol" que ya no
- * debería existir en el DTO — contra el endpoint HTTP real, para que
- * cualquier reintroducción futura del campo (con o sin el guard en
- * AuthService) se detecte acá.
+ * El fix actual (whitelist CLIENTE/ENTRENADOR en AuthService + fuerza
+ * CLIENTE para cualquier otro valor) ya está cubierto indirectamente por
+ * AuthServiceTest, pero ese es un test de unidad sobre el service, no
+ * ejercita el binding real de JSON a través del controller. Este test manda
+ * el payload crudo tal cual lo mandaría un atacante — incluyendo el campo
+ * "rol":"ADMIN" — contra el endpoint HTTP real.
+ *
+ * Nota Fase 2: CON bootstrap del primer admin activo (2026-08-02), el test
+ * necesita un ADMIN presente para que la regla "registro público nunca
+ * auto-escala" se pruebe determinísticamente en cualquier base (fresca o
+ * no). Por eso `asegurarAdminActivo()` seembra un admin antes de registrar.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureTestRestTemplate
@@ -37,9 +45,17 @@ class AuthRegisterPrivilegeEscalationRegressionTest {
     @Autowired
     private TestRestTemplate restTemplate;
 
+    @Autowired
+    private UsuarioRepository usuarioRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
     @SuppressWarnings("unchecked")
     @Test
     void registroConRolAdminEnElBody_ignoraElCampoYQuedaComoCliente() {
+        asegurarAdminActivo();
+
         String email = "regression-priv-esc-" + System.nanoTime() + "@gymflow.com";
 
         String payloadConRolAdmin = """
@@ -64,5 +80,20 @@ class AuthRegisterPrivilegeEscalationRegressionTest {
         assertThat(response.getBody().get("rol"))
                 .as("un registro público nunca debe poder auto-asignarse un rol distinto a CLIENTE")
                 .isEqualTo("CLIENTE");
+    }
+
+    // El bootstrap del primer admin (2026-08-02) solo aplica cuando el sistema
+    // NO tiene admins. Garantizamos que exista uno para que este test verifique
+    // exclusivamente el "no auto-escala", no el bootstrap.
+    private void asegurarAdminActivo() {
+        if (usuarioRepository.countByRolAndActivo(Rol.ADMIN, true) == 0) {
+            usuarioRepository.save(Usuario.builder()
+                    .nombre("Admin Bootstrap")
+                    .email("bootstrap-admin-" + System.nanoTime() + "@gymflow.com")
+                    .password(passwordEncoder.encode("PasswordSegura2026!"))
+                    .rol(Rol.ADMIN)
+                    .activo(true)
+                    .build());
+        }
     }
 }

@@ -181,4 +181,78 @@ class SuscripcionServiceTest {
 
         verifyNoInteractions(suscripcionRepository);
     }
+
+    // ─── Fase 3: self-service POST /suscripciones/mi ─────────────────
+
+    @Test
+    @SuppressWarnings("null")
+    void inscribir_usuarioAutenticadoYFechaPorDefectoHoy() {
+        when(usuarioRepository.findByEmail("william@gymflow.com")).thenReturn(Optional.of(usuario));
+        when(planRepository.findById(1L)).thenReturn(Optional.of(plan));
+        when(suscripcionRepository.findByUsuarioIdAndEstado(1L, EstadoSuscripcion.ACTIVA))
+                .thenReturn(Optional.empty());
+
+        SuscripcionResponseDTO response = suscripcionService.inscribir("william@gymflow.com", 1L, null);
+
+        assertThat(response.getNombrePlan()).isEqualTo("Plan Mensual");
+        assertThat(response.getEstado()).isEqualTo(EstadoSuscripcion.ACTIVA);
+        assertThat(response.getFechaInicio()).isEqualTo(LocalDate.now());
+        assertThat(response.getFechaFin()).isEqualTo(LocalDate.now().plusDays(30));
+        verify(suscripcionRepository).save(any());
+    }
+
+    @Test
+    @SuppressWarnings("null")
+    void inscribir_conFechaInicioExplicita() {
+        when(usuarioRepository.findByEmail("william@gymflow.com")).thenReturn(Optional.of(usuario));
+        when(planRepository.findById(1L)).thenReturn(Optional.of(plan));
+        when(suscripcionRepository.findByUsuarioIdAndEstado(1L, EstadoSuscripcion.ACTIVA))
+                .thenReturn(Optional.empty());
+
+        SuscripcionResponseDTO response = suscripcionService
+                .inscribir("william@gymflow.com", 1L, LocalDate.of(2026, 8, 1));
+
+        assertThat(response.getFechaFin()).isEqualTo(LocalDate.of(2026, 8, 31));
+    }
+
+    @Test
+    @SuppressWarnings("null")
+    void inscribir_planInactivo_lanzaExcepcion() {
+        plan.setActivo(false);
+        when(usuarioRepository.findByEmail("william@gymflow.com")).thenReturn(Optional.of(usuario));
+        when(planRepository.findById(1L)).thenReturn(Optional.of(plan));
+
+        assertThatThrownBy(() -> suscripcionService.inscribir("william@gymflow.com", 1L, null))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("no está disponible");
+
+        verify(suscripcionRepository, never()).findByUsuarioIdAndEstado(any(), any());
+        verify(suscripcionRepository, never()).save(any());
+    }
+
+    @Test
+    @SuppressWarnings("null")
+    void inscribir_usuarioYaTieneActiva_lanzaExcepcion() {
+        when(usuarioRepository.findByEmail("william@gymflow.com")).thenReturn(Optional.of(usuario));
+        when(planRepository.findById(1L)).thenReturn(Optional.of(plan));
+        when(suscripcionRepository.findByUsuarioIdAndEstado(1L, EstadoSuscripcion.ACTIVA))
+                .thenReturn(Optional.of(suscripcion));
+
+        assertThatThrownBy(() -> suscripcionService.inscribir("william@gymflow.com", 1L, null))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("ya tiene una suscripción activa");
+
+        verify(suscripcionRepository, never()).save(any());
+    }
+
+    @Test
+    void inscribir_usuarioInexistente_lanzaExcepcion() {
+        when(usuarioRepository.findByEmail("ghost@gymflow.com")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> suscripcionService.inscribir("ghost@gymflow.com", 1L, null))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Usuario no encontrado con email");
+
+        verifyNoInteractions(suscripcionRepository, planRepository);
+    }
 }

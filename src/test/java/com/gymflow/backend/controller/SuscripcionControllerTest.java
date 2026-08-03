@@ -1,5 +1,6 @@
 package com.gymflow.backend.controller;
 
+import com.gymflow.backend.dto.InscripcionRequestDTO;
 import com.gymflow.backend.dto.SuscripcionResponseDTO;
 import com.gymflow.backend.service.SuscripcionService;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,6 +47,25 @@ class SuscripcionControllerTest {
         assertThat(respuesta.getStatusCode().value()).isEqualTo(200);
         assertThat(respuesta.getBody()).isSameAs(pagina);
         verify(suscripcionService).listarPorUsuarioEmail("cliente@gymflow.test", pageable);
+        verifyNoMoreInteractions(suscripcionService);
+    }
+
+    @Test
+    void inscribirme_usaElEmailDelPrincipalYDelegaSinIdDelCuerpo() {
+        InscripcionRequestDTO request = new InscripcionRequestDTO();
+        request.setPlanId(2L);
+        request.setFechaInicio(LocalDate.of(2026, 8, 1));
+        SuscripcionResponseDTO creada = SuscripcionResponseDTO.builder().id(9L).build();
+        when(authentication.getName()).thenReturn("cliente@gymflow.test");
+        when(suscripcionService.inscribir("cliente@gymflow.test", 2L, LocalDate.of(2026, 8, 1)))
+                .thenReturn(creada);
+
+        ResponseEntity<SuscripcionResponseDTO> respuesta = suscripcionController
+                .inscribirme(authentication, request);
+
+        assertThat(respuesta.getStatusCode().value()).isEqualTo(201);
+        assertThat(respuesta.getBody()).isSameAs(creada);
+        verify(suscripcionService).inscribir("cliente@gymflow.test", 2L, LocalDate.of(2026, 8, 1));
         verifyNoMoreInteractions(suscripcionService);
     }
 }

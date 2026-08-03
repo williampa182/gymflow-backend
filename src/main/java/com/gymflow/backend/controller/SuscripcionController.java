@@ -1,5 +1,6 @@
 package com.gymflow.backend.controller;
 
+import com.gymflow.backend.dto.InscripcionRequestDTO;
 import com.gymflow.backend.dto.SuscripcionRequestDTO;
 import com.gymflow.backend.dto.SuscripcionResponseDTO;
 import com.gymflow.backend.model.enums.EstadoSuscripcion;
@@ -29,6 +30,22 @@ public class SuscripcionController {
             @PageableDefault(size = 20, sort = "id") Pageable pageable) {
         return ResponseEntity.ok(
                 suscripcionService.listarPorUsuarioEmail(authentication.getName(), pageable));
+    }
+
+    @PostMapping("/mi")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<SuscripcionResponseDTO> inscribirme(
+            Authentication authentication,
+            @Valid @RequestBody InscripcionRequestDTO request) {
+        // Self-service (Fase 3): la identidad sale del JWT
+        // (authentication.getName()), jamás de un usuarioId del body. El
+        // pago es mock (demo de portafolio): el POST simula la aprobación
+        // de la pasarela y activa la membresía directo.
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                suscripcionService.inscribir(
+                        authentication.getName(),
+                        request.getPlanId(),
+                        request.getFechaInicio()));
     }
 
     @PostMapping

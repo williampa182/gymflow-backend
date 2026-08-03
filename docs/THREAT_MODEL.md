@@ -228,3 +228,96 @@ runtime, la auditoría de pendientes del 23/07 y la revisión de features
 nuevas del 01/08 — vive en [`SECURITY_AUDIT_LOG.md`](SECURITY_AUDIT_LOG.md).
 El resumen ejecutivo con la tabla hallazgos→estado y quién hizo qué está en
 [`SECURITY_CHANGELOG.md`](SECURITY_CHANGELOG.md).
+
+---
+
+## 8. Fase 2 — registro con rol: decisiones de seguridad (2026-08-02)
+
+Registro público con auto-rol CLIENTE/ENTRENADOR + bootstrap del primer
+admin. Decisiones y su racional:
+
+- **Whitelist estricta en `AuthService.registrar`**: solo `CLIENTE` y
+  `ENTRENADOR` pasan del body; cualquier otro valor — en particular
+  `"ADMIN"` — o la ausencia del campo se degradan a CLIENTE (`resolverRolRegistro`).
+  Mantiene el fix de escalada §7.0 del security deep dive: el test de
+  regresión `AuthRegisterPrivilegeEscalationRegressionTest` sigue enviando
+  `"rol":"ADMIN"` y esperando `200 + CLIENTE`.
+- **Sin `@Pattern` en `RegisterRequest`** (a propósito): validar con 400 el
+  rol no whitelistado cambiaría el contrato `200 + CLIENTE` que el test de
+  regresión verifica. La whitelist vive en el service, no en la validación
+  del DTO.
+- **Bootstrap del primer admin**: si `countByRolAndActivo(ADMIN, true) == 0`,
+  el primer usuario registrado nace ADMIN (self-provisioning del panel en un
+  despliegue desde cero). Una vez que existe al menos un ADMIN activo, la
+  whitelist manda y nadie más auto-escala. Esto NO reabre el vector §7.0: la
+  condición es exclusivamente "no hay administradores en el sistema", nunca
+  algo controlable por el payload del atacante (un atacante no puede crear
+  un "cero admins" — y si el sistema no tiene admins, el rol por default es
+  justamente lo que permite administrarlo).
+- **El último admin activo no es degradable/desactivable** (ya existía,
+  `UsuarioService` con bloqueo pesimista FOR UPDATE). Bootstrap + guarda
+  juntos garantizan: el sistema nunca se queda sin ADMIN, y el registro
+  nunca crea uno fuera de la regla bootstrap.
+- **`GET /api/auth/registro-estado`** (público): devuelve solo el booleano
+  `primerRegistroSeraAdmin` — no revela datos de usuarios ni emails.
+- **Tests**: `AuthServiceTest` (whitelist, degradación, bootstrap),
+  `AuthRegisterPrivilegeEscalationRegressionTest` y
+  `AccessDeniedReturns403RegressionTest` siembran un admin activo primero
+  para que la regla "registro → CLIENTE" sea determinística también en una
+  base recién creada (CI corre con Postgres efímero por job).
+
+---
+
+## 9. Fase 4 — rutinas y acompañamiento: decisiones de seguridad (2026-08-02)
+
+Dominio entrenador↔cliente: los ENTRENADORES crean rutinas (con ejercicios),
+se asignan como acompañantes de CLIENTES cuyo plan ACTIVO incluye entrenador
+personal, y les asignan rutinas. Decisiones y su racional:
+
+- **La elegibilidad es una regla derivada, no una decisión manual**:
+  `EntrenadorService.listarClientesElegibles` calcula en el momento quién
+  califica (suscripción ACTIVA + plan activo con `incluyeEntrenadorPersonal`).
+  Un entrenador NO puede acompañar a un cliente sin ese plan: `asignarme`
+  re-verifica la condición (check-then-act) y rechaza con
+  "el plan del cliente no incluye entrenador personal" (400). Si el plan
+  deja de incluir el beneficio, el cliente desaparece de la lista elegible
+  pero conserva su acompañamiento/rutinas históricas hasta que el entrenador
+  las cancele o desactive — decisión deliberada (no romper el historial).
+- **Ownership estricto de rutinas**: toda operación de escritura sobre una
+  rutina pasa por `findByIdAndEntrenadorId` (RutinaService). Un entrenador
+  no puede editar, desactivar o asignar la rutina de otro; el error
+  "solo el entrenador creador puede modificar esta rutina" se mapea a 403
+  en `inferirStatus` (nunca 404 — el mensaje ya identifica la acción, no
+  revela más). La identidad siempre sale de `authentication.getName()`,
+  jamás de un id del body (mismo patrón que Fase 3).
+- **Asignación de rutinas restringida a acompañados**: `asignar` exige que
+  el cliente tenga una asignación ACTIVA cuyo entrenador sea el creador de
+  la rutina. Un cliente no puede recibir rutinas de un desconocido.
+- **Cliente de solo lectura**: `GET /api/rutinas/mias` filtra
+  `rutina.activo = true` en la query (defensa en profundidad) y devuelve
+  SOLO las rutinas asignadas al cliente autenticado. `@PreAuthorize` por rol
+  en ambos lados (ENTRENADOR vs CLIENTE) con barrera real en Spring Security.
+- **Un solo acompañante ACTIVO por cliente**: chequeo check-then-act +
+  índice único parcial `uq_acompanante_activo_por_cliente` (migración 004)
+  como red de seguridad a nivel BD para el caso concurrente, mismo patrón
+  que la migración 001 para suscripciones ACTIVA. La cancelación solo puede
+  ejecutarla el entrenador de esa asignación (`findByIdAndEntrenadorId`),
+  y usa `@Version` contra cancelaciones concurrentes (409 vía
+  OptimisticLockingFailureException).
+- **Sin mass assignment**: los request DTOs nuevos (`RutinaRequestDTO`,
+  `EjercicioRequestDTO`) no declaran `entrenadorId`, `rutinaId`, `orden` ni
+  `activo` — el servidor los controla (re-enlace en `RutinaService`, orden
+  derivado del índice, estado vía acción explícita de desactivar). El
+  patrón de verificación sigue el de `DtoMassAssignmentRegressionTest`.
+- **Nunca se expone el email de los clientes** en `ClienteElegibleDTO`
+  (solo id + nombre + marca de acompañamiento + id de asignación propia).
+- **Solo el entrenador de la asignación puede cancelarla** (403 si no es
+  el suyo) y `EntrenadorService.asignarme` rechaza la auto-asignación
+  ("no podés ser tu propio acompañante", 400).
+- **Tests**: `RutinaServiceTest` (ownership, rutina inactiva, cliente no
+  acompañado, duplicado, idempotencia del quitar), `EntrenadorServiceTest`
+  (elegibilidad calculada, auto-asignación, plan sin beneficio, duplicado,
+  ownership de cancelación), 2 controller tests (identidad del principal),
+  e `EntrenadorRutinaIntegrationTest` (flujo end-to-end contra Postgres
+  real: registro → plan → suscripción → acompañamiento → rutina →
+  asignación → lectura cliente + 409s duplicados + 403 de rol cruzado).

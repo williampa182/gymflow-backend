@@ -11,6 +11,11 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import com.gymflow.backend.model.Usuario;
+import com.gymflow.backend.model.enums.Rol;
+import com.gymflow.backend.repository.UsuarioRepository;
 
 import java.util.Map;
 
@@ -30,6 +35,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * y pega contra endpoints protegidos con @PreAuthorize("hasRole('ADMIN')")
  * a través del HTTP real, verificando que la respuesta sea siempre un 403
  * con el mensaje de permisos — nunca un 500.
+ *
+ * Nota Fase 2: con el bootstrap del primer admin activo (2026-08-02),
+ * `asegurarAdminActivo()` garantiza que exista un ADMIN antes de registrar,
+ * para que el registro de aquí nazca CLIENTE determinísticamente en
+ * cualquier base (fresca o no) y el 403 se pruebe como tal.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureTestRestTemplate
@@ -38,8 +48,16 @@ class AccessDeniedReturns403RegressionTest {
     @Autowired
     private TestRestTemplate restTemplate;
 
+    @Autowired
+    private UsuarioRepository usuarioRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
     @SuppressWarnings("unchecked")
     private String registrarClienteYTomarToken() {
+        asegurarAdminActivo();
+
         String email = "regression-access-denied-" + System.nanoTime() + "@gymflow.com";
         String payload = """
                 {
@@ -88,5 +106,20 @@ class AccessDeniedReturns403RegressionTest {
                 token, "/api/dashboard/admin/estadisticas");
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(response.getBody()).contains("No tienes permisos");
+    }
+
+    // El bootstrap del primer admin (2026-08-02) solo aplica cuando el sistema
+    // NO tiene admins. Garantizamos que exista uno para que el registro de este
+    // test nazca CLIENTE determinísticamente (no ADMIN por bootstrap).
+    private void asegurarAdminActivo() {
+        if (usuarioRepository.countByRolAndActivo(Rol.ADMIN, true) == 0) {
+            usuarioRepository.save(Usuario.builder()
+                    .nombre("Admin Bootstrap")
+                    .email("bootstrap-admin-" + System.nanoTime() + "@gymflow.com")
+                    .password(passwordEncoder.encode("PasswordSegura2026!"))
+                    .rol(Rol.ADMIN)
+                    .activo(true)
+                    .build());
+        }
     }
 }

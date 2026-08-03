@@ -19,6 +19,7 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     boolean existsByEmail(String email);
     List<Usuario> findByRol(Rol rol);
     Page<Usuario> findByRol(Rol rol, Pageable pageable);
+    List<Usuario> findByRolAndActivo(Rol rol, boolean activo);
     long countByRolAndActivo(Rol rol, boolean activo);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
