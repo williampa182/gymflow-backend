@@ -85,7 +85,7 @@ reintroduzca `@Cacheable` en el futuro sin revisar el modelo de serialización.
 `RedisCacheConfig` y `@EnableCaching` fueron removidos por completo
 (superficie muerta = riesgo futuro innecesario); Redis se conserva para el
 rate limiting que sí lo usa. Referencia:
-`collab/propuestas/codex/codex-security-triage-redis-1.1-1.2.md`.
+`collab/historial/propuestas-cerradas/codex-security-triage-redis-1.1-1.2.md`.
 
 ---
 
@@ -129,7 +129,7 @@ alcanza.
   `postcss@8.5.22`/`sharp@0.35.3` (vendorizadas dentro de next, no
   resolubles con el bump solo). `next/image` no se usa, el pipeline de
   sharp no corre en runtime. Verificado en 0 vulnerabilidades el 07-27 y
-  de nuevo el 08-01 (ver `collab/aplicado/2026-08-01-cierre-npm-audit.md`).
+  de nuevo el 08-01 (ver `collab/historial/aplicado/2026-08-01-cierre-npm-audit.md`).
 - **§2.2 (X-Forwarded-For): CERRADO (07-24).** La propuesta original de
   Antigravity asumía que la IP real va al *principio* de `X-Forwarded-For`;
   verificado contra soporte oficial de Railway: va al **final**. Fix final
@@ -176,7 +176,7 @@ la última auditoría (chatbot `/api/chat` con LLM, notificaciones vía Resend
 Mejora futura del portafolio con nonce vía middleware de Next.js — requiere
 testeo real porque Next inyecta scripts inline.
 
-Ver `collab/aplicado/2026-08-01-revision-seguridad-features.md`.
+Ver `collab/historial/aplicado/2026-08-01-revision-seguridad-features.md`.
 
 ---
 

@@ -325,7 +325,7 @@ personal, y les asignan rutinas. Decisiones y su racional:
 ### Iteración 2 (2026-08-03): quitar rutina en la UI + historial de acompañamientos
 
 Ampliación aprobada por William tras la fase 4 (propuesta
-`collab/propuestas/opencode/deepseek-v4-flash-free/2026-08-03-fase4-iteracion2-quitar-rutina-y-historial.md`):
+`collab/historial/propuestas-cerradas/2026-08-03-fase4-iteracion2-quitar-rutina-y-historial.md`):
 
 - **`asignados` en `RutinaResponseDTO` solo para ENTRENADOR**: `GET
   /api/rutinas` (vista ENTRENADOR) puebla la lista de clientes asignados a

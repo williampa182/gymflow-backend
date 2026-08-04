@@ -8,9 +8,10 @@ de tocar cualquier código.
 
 **Antes de proponer o aplicar cualquier cambio, leé en este orden:**
 
-1. `collab/MAPA.md` (en la raíz de `C:\proyectos\gymflow\`) — índice de todo
-   lo que existe: qué está confirmado, qué está pendiente, qué propuso cada
-   herramienta, qué se aplicó y cuándo.
+1. `collab/MAPA.md` (en la raíz de `C:\proyectos\gymflow\`) — índice de
+   navegación; el estado vigente consolidado vive en `collab/estado/ACTUAL.md`
+   (fases, pendientes, agentes, diseño). Lo terminado se archiva en
+   `collab/historial/` (`aplicado/`, `handoffs/`, `propuestas-cerradas/`).
 2. `docs/THREAT_MODEL.md` — estado de verdad de seguridad. Si algo contradice
    este documento, el documento tiene razón, no tu suposición.
 3. `docs/ARCHITECTURE.md` — decisiones de diseño y por qué. **Nota: este
@@ -26,12 +27,12 @@ de tocar cualquier código.
 2. Otra herramienta (o Claude) la revisa contra el código real — no contra tu
    descripción de lo que hiciste.
 3. William decide si se aplica.
-4. Lo aplicado se registra en `collab/aplicado/` con fecha y qué archivos
-   reales se tocaron.
+4. Lo aplicado se registra en `collab/historial/aplicado/` con fecha y qué
+   archivos reales se tocaron.
 
 Excepción: si William te pide explícitamente "aplicá esto directo", podés
 saltar el paso de propuesta — pero igual documentá qué hiciste en
-`collab/aplicado/`.
+`collab/historial/aplicado/`.
 
 ## Errores ya cometidos en este proyecto — no los repitas
 
@@ -52,7 +53,7 @@ saltar el paso de propuesta — pero igual documentá qué hiciste en
 - **Claude** (Anthropic) — lleva el hilo principal de la auditoría de seguridad y coordina el flujo de `collab/`. Acceso vía Filesystem MCP, alcance limitado a `C:\proyectos\gymflow\`.
 - **Codex / Terra** (OpenAI) — acceso total a la máquina de William (filesystem + terminal), plugin "Codex Security" instalado (threat modeling, validación de hallazgos en sandbox real). Conectores adicionales: GitHub, Context7, Superpowers. Default para tareas acotadas con riesgo real (Terra + high effort).
 - **Antigravity (Gemini / Claude / GPT-OSS)** — usado para frontend y para tareas mecánicas de bajo riesgo (bumps de CI/Actions, cambios triviales sin lógica de negocio) que no ameritan gastar cuota de Claude. Cuota semanal compartida por grupo de modelos ("Gemini Models" vs "Claude and GPT models"), se resetea cada ~7 días — un agotamiento no es baja permanente.
-- **Trae** — agente adicional del roster; ver `collab/MAPA.md` para su rol vigente en cada sesión.
+- **Trae** — agente adicional del roster; ver `collab/estado/ACTUAL.md` para su rol vigente en cada sesión.
 - **OpenCode CLI (GPT-OSS-120B vía OpenRouter)** — acceso real de lectura/escritura al repo. Correr SIEMPRE con el `opencode.json` de este repo activo (bloquea `git commit`/`git push` a nivel de permisos), y aun así repetir la instrucción de no commitear en cada prompt — hay un bug conocido de OpenCode donde un subagente con más permisos puede saltarse las restricciones del agente principal. Es modelo gratuito/quantizado: verificar el archivo real (no solo lo que "dice" que hizo) antes de aprobar, puede devolver texto corrupto bajo carga.
 - **Z Code (Nemotron / GPT-OSS-20B vía OpenRouter)** — GLM-5.2 y Ollama ya no están disponibles en este pool. Usar solo para tareas pequeñas y acotadas, no al mismo nivel de confianza que Codex/Terra en modo high.
 - **ChatGPT** (chat, sin acceso a archivos) — usado puntualmente como tercera opinión de criterio en decisiones de diseño, ver `collab/opiniones-externas/`.
@@ -76,11 +77,11 @@ de un conector específico. No uses formatos propietarios de diagramas.
 ## Obsidian
 
 William tiene todo `C:\proyectos\gymflow\` abierto como bóveda de Obsidian,
-con `collab/MAPA.md` como nodo central del grafo visual. Cualquier archivo
-`.md` nuevo que generés en `collab/` debería agregarse a `MAPA.md` con un
-link relativo Markdown estándar (no wikilinks `[[...]]`, esos no los
-entienden ni vos ni las demás herramientas) para que aparezca conectado en
-el grafo.
+con `collab/MAPA.md` como nodo central del grafo visual. Todo `.md` nuevo de
+`collab/` se archiva en su carpeta correspondiente de `historial/` (o
+`propuestas/` si es activa) con link relativo Markdown estándar (no wikilinks
+`[[...]]`, esos no los entienden ni vos ni las demás herramientas); `MAPA.md`
+solo enlaza a la estructura y al estado vigente, no a cada archivo nuevo.
 
 ## Stack
 
@@ -92,5 +93,6 @@ ojo con el breaking change de Spring Security 7 en el constructor de
 
 ## Cosas que NO tocar sin coordinar primero
 
-Revisá `collab/MAPA.md` sección "Propuestas" para ver qué está en curso por
-otra herramienta en este momento, antes de tocar el mismo archivo.
+Revisá `collab/propuestas/` (activas) y `collab/estado/ACTUAL.md` (pendientes)
+para ver qué está en curso por otra herramienta en este momento, antes de
+tocar el mismo archivo.

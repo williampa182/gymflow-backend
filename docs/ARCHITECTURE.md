@@ -495,7 +495,7 @@ completo en `docs/THREAT_MODEL.md` §7.5.
 **Regresiones de proceso detectadas y corregidas** (documentadas para no
 repetirlas): un cambio de firma de método en la paginación rompió la
 compilación de tests existentes porque nadie los corrió antes de dar el
-cambio por bueno (ver `collab/aplicado/2026-07-12-fix-tests-paginacion.md`).
+cambio por bueno (ver `collab/historial/aplicado/2026-07-12-fix-tests-paginacion.md`).
 Desde entonces, toda tarea que cambie una firma pública debe verificar
 tests, no solo que el código de producción compile.
 
@@ -572,7 +572,7 @@ mejoras opcionales.
 ## 9. Dashboard ADMIN (agregado 2026-07-12)
 
 Trabajo cruzado entre GLM-5.2 (spec + componente frontend con Recharts,
-`collab/propuestas/glm/dashboard-admin-charts.md`) y Codex (backend,
+`collab/historial/propuestas-cerradas/dashboard-admin-charts.md`) y Codex (backend,
 `GET /api/dashboard/admin/estadisticas`). Ambos coincidieron exacto en la
 forma del JSON sin fricción de integración — confirmado por Claude leyendo
 ambos lados.

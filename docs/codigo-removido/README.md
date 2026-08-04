@@ -13,13 +13,13 @@ residuales en `PlanService.java`.
 **Riesgo que mitiga:** que alguien en el futuro reintroduzca `@Cacheable`
 sin revisar el modelo de seguridad del serializer (el `@class` metadata en
 el JSON, aunque no se demostró explotable con la config actual — ver
-Codex Security triage en `collab/propuestas/codex/codex-security-triage-redis-1.1-1.2.md`).
+Codex Security triage en `collab/historial/propuestas-cerradas/codex-security-triage-redis-1.1-1.2.md`).
 
 **Si en algún momento se quiere volver a agregar cache:** no reintroducir
 este archivo tal cual. Usar un serializer tipado por cache específica (no
 genérico), sin default typing activo, y agregar un test que confirme que un
 payload con `@class` inyectado en Redis no instancia tipos arbitrarios.
-Ver la alternativa propuesta en `collab/propuestas/codex/1.1-1.2-redis-hardening-propuesta.md`.
+Ver la alternativa propuesta en `collab/historial/propuestas-cerradas/1.1-1.2-redis-hardening-propuesta.md`.
 
 El archivo original queda en `RedisCacheConfig.java.txt` en esta misma
 carpeta como referencia, no como código activo.
