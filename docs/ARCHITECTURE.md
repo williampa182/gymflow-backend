@@ -83,7 +83,7 @@ validation/       NotCommonPassword, NotCommonPasswordValidator
 ### 2.4 Endpoints completos
 
 **`/api/auth`** (`AuthController`) — públicos:
-- `POST /api/auth/register` — rol SIEMPRE forzado a `CLIENTE` server-side (ver §6.1, escalada de privilegios corregida)
+- `POST /api/auth/register` — auto-registro con whitelist `CLIENTE`/`ENTRENADOR` server-side (`AuthService.resolverRolRegistro`); cualquier otro valor —incluido `ADMIN`— o la ausencia caen a `CLIENTE` (least privilege, fix de escalada §7.0). Bootstrap del primer admin: si no existe ningún `ADMIN` activo, el primer registro nace `ADMIN` (ver §6.1 y `THREAT_MODEL` §8 Fase 2)
 - `POST /api/auth/login`
 
 **`/api/planes`** (`PlanController`):

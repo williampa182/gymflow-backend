@@ -28,11 +28,11 @@ local como contra producción (Railway) — `e2e/registro.spec.ts` en
 1. Login como ADMIN.
 2. Ve tabla de usuarios en `/dashboard/usuarios`.
 3. Activa/desactiva un usuario.
-4. (Pendiente evaluar) ¿Hay forma de promover CLIENTE → ENTRENADOR/ADMIN desde la UI,
-   o solo por SQL directo? Hoy es solo SQL directo — evaluar si vale la pena
-   un endpoint `PATCH /api/usuarios/{id}/rol` protegido para ADMIN.
+4. Promueve CLIENTE → ENTRENADOR/ADMIN vía `PATCH /api/usuarios/{id}/rol`
+   protegido con `@PreAuthorize("hasRole('ADMIN')")`, expuesto en la UI de
+   `/dashboard/usuarios` (resolución C02, 2026-08-03).
 
-**Estado:** parcialmente verificado. Falta decidir el punto 4.
+**Estado:** verificado (2026-08-03): endpoint + guard + UI + tests.
 
 ## 3. Cliente se suscribe a un plan
 1. Login como CLIENTE.
