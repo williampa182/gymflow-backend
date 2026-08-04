@@ -23,7 +23,7 @@ de tocar cualquier código.
 **No apliques cambios directo al código sin dejar rastro.** El flujo es:
 
 1. Generás una propuesta como archivo `.md` en `collab/propuestas/<tu-nombre>/`
-   (ej. `collab/propuestas/codex/`, `collab/propuestas/glm/`).
+   (ej. `collab/propuestas/codex/`, `collab/propuestas/zcode/`).
 2. Otra herramienta (o Claude) la revisa contra el código real — no contra tu
    descripción de lo que hiciste.
 3. William decide si se aplica.
