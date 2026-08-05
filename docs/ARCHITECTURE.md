@@ -518,9 +518,10 @@ mejoras opcionales.
    2026-08-01: ampliar `script-src`/`object-src`/`base-uri` con nonce.
    Requiere testeo real con los scripts inline de Next.
 
-4. **Housekeeping de dependencias frontend** — bumps pendientes sin impacto
-   en seguridad: `eslint-config-next 16.2.10→16.2.12`, `@types/react 19.2.18`,
-   `@types/react-dom 19.2.4`, `@vitejs/plugin-react 6.0.5`.
+4. **Housekeeping de dependencias frontend** — **CERRADO (2026-08-05)**:
+   bumps aplicados: `eslint-config-next 16.2.12`, `@types/react 19.2.18`,
+   `@types/react-dom 19.2.4`, `@vitejs/plugin-react 6.0.5`. Verificado: lint
+   limpio, 111/111 tests, build OK, `npm audit` 0 vulnerabilidades.
 
 5. **Checklist pre-repo-público** — revisar triggers de los workflows y qué
    secrets ve cada uno (`THREAT_MODEL.md` §4.4), y verificar el estado de
