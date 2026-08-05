@@ -12,7 +12,7 @@
 | Hallazgos confirmados en auditorías (2026-07-09 → 2026-08-01) | 34 |
 | Corregidos / cerrados (incluidos reclasificados y documentados) | 34 |
 | Pendientes de código | 0 |
-| Pendientes de verificación en producción | 1 (Redis `requirepass` en Railway, requiere consola) |
+| Pendientes de verificación en producción | 0 (Redis `requirepass` en Railway verificado 2026-08-04: AUTH ok) |
 | `npm audit` (frontend) | 0 vulnerabilidades (verificado 2026-08-01) |
 | CVE-2026-40976 (Spring Boot 4.x + Actuator) | No aplica (Boot 4.1.0, fuera de rango + `SecurityConfig` propio) |
 

@@ -505,9 +505,7 @@ Estado al 2026-08-01. Los pendientes históricos de abajo (migración a Boot 4
 y deploy a Railway) están **cerrados**; quedan pocos ítems de verificación y
 mejoras opcionales.
 
-1. **Verificar `requirepass` de Redis en Railway prod** — único pendiente de
-   seguridad activo; requiere consola de la plataforma (ver `THREAT_MODEL.md`
-   §1.1). No es trabajo de código.
+1. **Verificar `requirepass` de Redis en Railway prod** — **CERRADO (2026-08-04)**: AUTH verificado contra el Redis de prod (PING autenticado ok) y la app opera con 200 (fail-closed no disparado). Ver `THREAT_MODEL.md` §1.1.
 
 2. **Alinear Postgres dev/CI/prod** — Railway corre Postgres 18, el
    `docker-compose.yml` local sigue en 16. El backup de CI ya usa el cliente

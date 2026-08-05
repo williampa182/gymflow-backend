@@ -19,8 +19,7 @@
 > la tabla completa de hallazgos→estado está en
 > [`SECURITY_CHANGELOG.md`](SECURITY_CHANGELOG.md). Resumen honesto:
 >
-> - §1.1 (Redis auth): resuelto en dev (07-11); única verificación pendiente
->   es confirmar `requirepass` activo en Railway prod (requiere consola).
+> - §1.1 (Redis auth): resuelto en dev (07-11) y **verificado en prod (2026-08-04)** — AUTH aceptada contra el Redis de Railway con la password real (PING ok) y la app opera 200 (fail-closed no disparado).
 > - §1.2: degradado a hardening preventivo y resuelto (cache removido).
 > - §1.3 (CVE-2026-40976): no aplica (Boot 4.1.0 + `SecurityConfig` propio).
 > - §2.2 (X-Forwarded-For): cerrado 07-24 vía `RemoteIpValve` nativo.
@@ -43,7 +42,7 @@ La sección 8 (`ARCHITECTURE.md`) del proyecto ya documenta el porqué de varias
 
 ### 1.1 Redis sin autenticación (`requirepass` no configurado)
 - **Severidad:** Crítica
-- **Estado:** RESUELTO en dev (2026-07-11) — `requirepass` + bind a `127.0.0.1` en `docker-compose.yml`, password en `application.yaml`. **Pendiente de verificación en Railway (prod)** — requiere consola de la plataforma.
+- **Estado:** RESUELTO y VERIFICADO EN PROD (2026-08-04) — `requirepass` + bind a `127.0.0.1` en `docker-compose.yml` (dev, 07-11); en Railway la password se inyecta vía `REDIS_PASSWORD` y se verificó con un PING autenticado contra el endpoint público del Redis de prod. No se expone a internet de forma anónima: el AUTH es obligatorio.
 - **Impacto:** Es la raíz de la que cuelgan varios otros hallazgos de este documento (1.2, 3.1, 4.2). Sin autenticación, cualquiera con acceso de red al puerto 6379 puede leer/escribir/borrar todo el contenido de Redis sin restricción.
 - **Explotación:** Si el puerto queda expuesto (mala segmentación de red en Railway, docker mal configurado), conexión directa con `redis-cli` sin credenciales.
 - **Mitigación:** `requirepass` obligatorio en dev y prod (no "para cuando se despliegue"). Confirmar que Redis en Railway solo escucha en red interna, nunca expuesto a internet.
