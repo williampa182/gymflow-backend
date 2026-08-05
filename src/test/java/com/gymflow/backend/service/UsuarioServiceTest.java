@@ -1,5 +1,6 @@
 package com.gymflow.backend.service;
 
+import com.gymflow.backend.dto.CarnetResponseDTO;
 import com.gymflow.backend.dto.UsuarioResponseDTO;
 import com.gymflow.backend.model.Usuario;
 import com.gymflow.backend.model.enums.Rol;
@@ -30,6 +31,9 @@ class UsuarioServiceTest {
 
     @Mock
     private UsuarioRepository usuarioRepository;
+
+    @Mock
+    private CodigoCarnetGenerator codigoCarnetGenerator;
 
     @InjectMocks
     private UsuarioService usuarioService;
@@ -233,6 +237,69 @@ class UsuarioServiceTest {
         assertThat(resultado.isActivo()).isTrue();
         verify(usuarioRepository, never()).countByRolAndActivo(any(), anyBoolean());
         verify(usuarioRepository).save(usuario);
+    }
+
+    @Test
+    void obtenerCarnet_adminVeCarnetDelUsuario() {
+        Usuario conCarnet = usuario(1L, "william@gymflow.com", Rol.ADMIN, true);
+        conCarnet.setCodigoCarnet("ABC123");
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(conCarnet));
+
+        CarnetResponseDTO resultado = usuarioService.obtenerCarnet(1L);
+
+        assertThat(resultado.getCodigoCarnet()).isEqualTo("ABC123");
+        assertThat(resultado.getNombre()).isEqualTo("Usuario 1");
+    }
+
+    @Test
+    void obtenerCarnet_usuarioNoEncontrado_lanzaExcepcion() {
+        when(usuarioRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> usuarioService.obtenerCarnet(99L))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Usuario no encontrado");
+    }
+
+    @Test
+    void obtenerCarnet_usuarioSinCodigo_lanza404() {
+        usuario.setCodigoCarnet(null);
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+
+        assertThatThrownBy(() -> usuarioService.obtenerCarnet(1L))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Código de carnet no encontrado");
+    }
+
+    @Test
+    void rotarCarnet_generaNuevoCodigoYLoGuarda() {
+        Usuario conCarnet = usuario(1L, "william@gymflow.com", Rol.ADMIN, true);
+        conCarnet.setCodigoCarnet("ABC123");
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(conCarnet));
+        when(codigoCarnetGenerator.generarUnico(any())).thenReturn("XYZ789");
+
+        CarnetResponseDTO resultado = usuarioService.rotarCarnet(1L);
+
+        assertThat(resultado.getCodigoCarnet()).isEqualTo("XYZ789");
+        assertThat(resultado.getNombre()).isNull();
+        assertThat(conCarnet.getCodigoCarnet()).isEqualTo("XYZ789");
+        verify(codigoCarnetGenerator).generarUnico(any());
+        verify(usuarioRepository).save(conCarnet);
+    }
+
+    @Test
+    void rotarCarnet_generadorAgotaReintentos_noCambiaElCodigo() {
+        Usuario conCarnet = usuario(1L, "william@gymflow.com", Rol.ADMIN, true);
+        conCarnet.setCodigoCarnet("ABC123");
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(conCarnet));
+        when(codigoCarnetGenerator.generarUnico(any()))
+                .thenThrow(new RuntimeException("No se pudo generar un codigo de carnet unico"));
+
+        assertThatThrownBy(() -> usuarioService.rotarCarnet(1L))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("No se pudo generar un codigo de carnet unico");
+
+        assertThat(conCarnet.getCodigoCarnet()).isEqualTo("ABC123");
+        verify(usuarioRepository, never()).save(any());
     }
 
     private Usuario usuario(Long id, String email, Rol rol, boolean activo) {

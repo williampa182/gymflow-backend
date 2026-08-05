@@ -17,6 +17,10 @@ import java.util.Optional;
 public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     Optional<Usuario> findByEmail(String email);
     boolean existsByEmail(String email);
+    boolean existsByCodigoCarnet(String codigoCarnet);
+    // Kiosco (Fase 5): el código de carnet resuelve al usuario en el momento del
+    // ingreso; nunca es clave de asistencias (la rotación no toca historial).
+    Optional<Usuario> findByCodigoCarnet(String codigoCarnet);
     List<Usuario> findByRol(Rol rol);
     Page<Usuario> findByRol(Rol rol, Pageable pageable);
     List<Usuario> findByRolAndActivo(Rol rol, boolean activo);

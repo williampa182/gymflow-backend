@@ -8,6 +8,7 @@ import org.jspecify.annotations.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -24,9 +25,10 @@ import java.time.Duration;
  * hechos rápido ("vibe coded"). Usa Redis (ya disponible en el proyecto) para
  * llevar un contador por IP con ventana deslizante fija de 1 minuto.
  *
- * Límite: 10 intentos por IP por minuto a /api/auth/**. Suficiente para un
- * usuario legítimo que se equivoca de contraseña varias veces, demasiado poco
- * para un ataque de fuerza bruta efectivo.
+ * Límite: 10 intentos por IP por minuto a /api/auth/** (configurable vía
+ * app.security.auth-rate-limit.max-per-minute; los tests de integración lo
+ * suben para que el registro de fixtures no agote la ventana compartida de
+ * Redis — ver AsistenciaIntegrationTest y afines).
  */
 @Component
 @RequiredArgsConstructor
@@ -34,8 +36,10 @@ public class LoginRateLimitFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(LoginRateLimitFilter.class);
 
-    private static final int MAX_INTENTOS_POR_MINUTO = 10;
     private static final Duration VENTANA = Duration.ofMinutes(1);
+
+    @Value("${app.security.auth-rate-limit.max-per-minute:10}")
+    private int maxIntentosPorMinuto;
 
     private final StringRedisTemplate redisTemplate;
 
@@ -93,7 +97,7 @@ public class LoginRateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        if (intentos != null && intentos > MAX_INTENTOS_POR_MINUTO) {
+        if (intentos != null && intentos > maxIntentosPorMinuto) {
             response.setStatus(429); // Too Many Requests
             response.setContentType("application/json");
             response.getWriter().write(

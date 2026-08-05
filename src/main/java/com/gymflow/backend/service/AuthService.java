@@ -35,6 +35,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
+    private final CodigoCarnetGenerator codigoCarnetGenerator;
 
     // Fix A (user-enumeration-3.1.md). Decisión de default y razonamiento:
     // ver collab/aplicado/2026-07-16-decision-reveal-email-false.md
@@ -81,11 +82,20 @@ public class AuthService {
             rol = Rol.ADMIN;
         }
 
+        // Código de carnet con gating estricto (Fase 5): se genera ANTES del
+        // save con reintentos contra el índice único; si el generador agota
+        // los reintentos lanza y nunca se guarda un usuario sin código.
+        // Estable de por vida; la rotación por pérdida vive en
+        // UsuarioService.rotarCarnet.
+        String codigoCarnet = codigoCarnetGenerator.generarUnico(
+                codigo -> usuarioRepository.existsByCodigoCarnet(codigo));
+
         Usuario usuario = Usuario.builder()
                 .nombre(request.getNombre())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .rol(rol)
+                .codigoCarnet(codigoCarnet)
                 .build();
 
         usuarioRepository.save(usuario);

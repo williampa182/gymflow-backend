@@ -14,7 +14,6 @@ import com.gymflow.backend.repository.UsuarioRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -23,7 +22,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -43,7 +45,12 @@ class SuscripcionServiceTest {
     @Mock
     private PlanRepository planRepository;
 
-    @InjectMocks
+    // Clock fijo de Bogotá (patrón Fase 5): el servicio inyecta el bean
+    // RelojBogotaConfig en prod; acá se fija la fecha para que "hoy" sea
+    // determinístico. 2026-08-03T15:00:00Z = 2026-08-03 10:00 en Bogotá.
+    private final Clock clock = Clock.fixed(
+            Instant.parse("2026-08-03T15:00:00Z"), ZoneId.of("America/Bogota"));
+
     private SuscripcionService suscripcionService;
 
     private Usuario usuario;
@@ -53,6 +60,12 @@ class SuscripcionServiceTest {
 
     @BeforeEach
     void setUp() {
+        // Construcción manual: @InjectMocks no inyecta un Clock real (solo
+        // @Mock/@Spy), y el Clock fijo es valor, no mock — la fecha "hoy"
+        // debe ser determinística (Fase 5, regla 7).
+        suscripcionService = new SuscripcionService(
+                suscripcionRepository, usuarioRepository, planRepository, clock);
+
         usuario = Usuario.builder()
                 .id(1L)
                 .nombre("William Admin")
@@ -196,8 +209,8 @@ class SuscripcionServiceTest {
 
         assertThat(response.getNombrePlan()).isEqualTo("Plan Mensual");
         assertThat(response.getEstado()).isEqualTo(EstadoSuscripcion.ACTIVA);
-        assertThat(response.getFechaInicio()).isEqualTo(LocalDate.now());
-        assertThat(response.getFechaFin()).isEqualTo(LocalDate.now().plusDays(30));
+        assertThat(response.getFechaInicio()).isEqualTo(LocalDate.of(2026, 8, 3));
+        assertThat(response.getFechaFin()).isEqualTo(LocalDate.of(2026, 8, 3).plusDays(30));
         verify(suscripcionRepository).save(any());
     }
 

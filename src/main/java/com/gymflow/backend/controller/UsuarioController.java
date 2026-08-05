@@ -1,5 +1,6 @@
 package com.gymflow.backend.controller;
 
+import com.gymflow.backend.dto.CarnetResponseDTO;
 import com.gymflow.backend.dto.request.CambioRolRequest;
 import com.gymflow.backend.dto.UsuarioResponseDTO;
 import com.gymflow.backend.model.enums.Rol;
@@ -42,5 +43,19 @@ public class UsuarioController {
             @PathVariable Long id,
             @RequestParam boolean activo) {
         return ResponseEntity.ok(usuarioService.cambiarEstado(id, activo));
+    }
+
+    @GetMapping("/{id}/carnet")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<CarnetResponseDTO> carnet(@PathVariable Long id) {
+        // Reimpresión: devuelve también el nombre para que el ADMIN vea de
+        // quién es el carnet que está imprimiendo.
+        return ResponseEntity.ok(usuarioService.obtenerCarnet(id));
+    }
+
+    @PostMapping("/{id}/carnet/rotar")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<CarnetResponseDTO> rotarCarnet(@PathVariable Long id) {
+        return ResponseEntity.ok(usuarioService.rotarCarnet(id));
     }
 }

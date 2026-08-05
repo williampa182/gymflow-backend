@@ -69,6 +69,15 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNAUTHORIZED, "Email o contraseña incorrectos", null);
     }
 
+    @ExceptionHandler(KioskKeyInvalidaException.class)
+    public ResponseEntity<Map<String, Object>> handleKioskKeyInvalida(KioskKeyInvalidaException ex) {
+        // Fase 5, P4: credencial de dispositivo del kiosco inválida/ausente.
+        // Handler propio (NO inferirStatus): el 401 de credencial es distinto
+        // del 403 de rol y hoy el único 401 del proyecto es BadCredentials.
+        // Mensaje genérico: nunca revelar nada de la key.
+        return build(HttpStatus.UNAUTHORIZED, "Credencial de kiosco inválida", null);
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<Map<String, Object>> handleDataIntegrity(DataIntegrityViolationException ex) {
         // Cubre violaciones de constraint única (ej. email duplicado si en
@@ -154,6 +163,29 @@ public class GlobalExceptionHandler {
         // Fase 4: reglas de elegibilidad del acompañamiento (plan sin
         // entrenador personal, auto-asignación, usuario no cliente).
         if (m.contains("no podés ser tu propio") || m.contains("no incluye") || m.contains("no es un cliente")) return HttpStatus.BAD_REQUEST;
+        // Fase 5: check-in del cliente (POST /api/asistencias/mi). Duplicado
+        // del día → 409 (mismo criterio que el duplicado de suscripción
+        // activa), usuario dado de baja → 403, sin plan activo → 400.
+        // Substrings disjuntos a propósito: el 400 ("No tenés un plan activo
+        // para registrar tu entrada") contiene "tu entrada", que NO se usa
+        // como matcher para no colisionar con el 409.
+        if (m.contains("registraste tu entrada")) return HttpStatus.CONFLICT;
+        if (m.contains("dado de baja")) return HttpStatus.FORBIDDEN;
+        if (m.contains("no tenés un plan activo")) return HttpStatus.BAD_REQUEST;
+        // Fase 5, P5: duplicado del día marcado por el ADMIN/kiosco → 409.
+        // Mensaje distinto del SELF ("registraste") a propósito: el que ya
+        // marcó es el CLIENTE. Substrings disjuntos.
+        if (m.contains("ya registró")) return HttpStatus.CONFLICT;
+        // Fase 5, P5: desmarcar SOLO la de hoy (regla 6). Redacción elegida
+        // para NO colisionar con el match 403 de "solo podés" (la spec lo
+        // exige explícitamente).
+        if (m.contains("desmarcar")) return HttpStatus.BAD_REQUEST;
+        // Fase 5, P4: código de carnet inválido en el kiosco → 400 genérico
+        // (sin distinguir código inexistente de sin plan ni exponer el código
+        // recibido; el rate limit doble del filtro es la red anti-abuso). A
+        // propósito NO es "no encontrad" (ese matcher da 404): el contrato
+        // del endpoint #2 de la spec dice 400 para código inválido.
+        if (m.contains("código de carnet inválido")) return HttpStatus.BAD_REQUEST;
         return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 

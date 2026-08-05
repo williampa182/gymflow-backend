@@ -20,6 +20,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
+import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -46,11 +47,19 @@ class AuthServiceTest {
     @Mock
     private AuthenticationManager authenticationManager;
 
+    @Mock
+    private CodigoCarnetGenerator codigoCarnetGenerator;
+
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(usuarioRepository, passwordEncoder, jwtUtil, authenticationManager);
+        authService = new AuthService(
+                usuarioRepository, passwordEncoder, jwtUtil, authenticationManager, codigoCarnetGenerator);
+    }
+
+    private void stubGeneracionDeCarnet() {
+        when(codigoCarnetGenerator.generarUnico(any())).thenReturn("ABC123");
     }
 
     @Test
@@ -86,6 +95,7 @@ class AuthServiceTest {
         when(usuarioRepository.countByRolAndActivo(Rol.ADMIN, true)).thenReturn(1L);
         when(passwordEncoder.encode(RAW_PASSWORD)).thenReturn(CURRENT_COST_HASH);
         when(jwtUtil.generarToken(any(Usuario.class))).thenReturn("jwt-generado");
+        stubGeneracionDeCarnet();
 
         AuthResponse response = authService.registrar(request);
 
@@ -96,10 +106,45 @@ class AuthServiceTest {
         assertThat(usuarioGuardado.getNombre()).isEqualTo(request.getNombre());
         assertThat(usuarioGuardado.getEmail()).isEqualTo(EMAIL);
         assertThat(usuarioGuardado.getPassword()).isEqualTo(CURRENT_COST_HASH);
+        assertThat(usuarioGuardado.getCodigoCarnet()).isEqualTo("ABC123");
         verify(jwtUtil).generarToken(usuarioGuardado);
         assertThat(response)
                 .extracting(AuthResponse::getToken, AuthResponse::getTipo, AuthResponse::getEmail, AuthResponse::getRol)
                 .containsExactly("jwt-generado", "Bearer", EMAIL, Rol.CLIENTE);
+    }
+
+    @Test
+    void registrar_generaCodigoDeCarnetUnicoYLoGuarda() {
+        RegisterRequest request = registerRequest();
+        when(usuarioRepository.existsByEmail(EMAIL)).thenReturn(false);
+        when(usuarioRepository.countByRolAndActivo(Rol.ADMIN, true)).thenReturn(1L);
+        when(passwordEncoder.encode(RAW_PASSWORD)).thenReturn(CURRENT_COST_HASH);
+        when(jwtUtil.generarToken(any(Usuario.class))).thenReturn("jwt-generado");
+        stubGeneracionDeCarnet();
+
+        authService.registrar(request);
+
+        // El predicado que el service le pasa al generador consulta el índice
+        // único (existsByCodigoCarnet), no queda muerto.
+        ArgumentCaptor<Predicate<String>> predicadoCaptor = ArgumentCaptor.forClass(Predicate.class);
+        verify(codigoCarnetGenerator).generarUnico(predicadoCaptor.capture());
+        when(usuarioRepository.existsByCodigoCarnet("ABC123")).thenReturn(true);
+        assertThat(predicadoCaptor.getValue().test("ABC123")).isTrue();
+    }
+
+    @Test
+    void registrar_generadorAgotaReintentos_noGuardaUsuarioYLanza() {
+        RegisterRequest request = registerRequest();
+        when(usuarioRepository.existsByEmail(EMAIL)).thenReturn(false);
+        when(usuarioRepository.countByRolAndActivo(Rol.ADMIN, true)).thenReturn(1L);
+        when(codigoCarnetGenerator.generarUnico(any()))
+                .thenThrow(new RuntimeException("No se pudo generar un codigo de carnet unico"));
+
+        assertThatThrownBy(() -> authService.registrar(request))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("No se pudo generar un codigo de carnet unico");
+
+        verify(usuarioRepository, never()).save(any());
     }
 
     @Test

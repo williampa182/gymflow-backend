@@ -232,6 +232,14 @@ app:
     # Cron del job diario (default: 09:00 hora local del servidor).
     aviso-cron: "${EMAIL_AVISO_CRON:0 0 9 * * *}"
 
+  kiosk:
+    # Clave del kiosco de recepción (Fase 5). Blank por defecto = NO
+    # configurado (fail-closed: el kiosco degrada a "Iniciar sesión con cuenta
+    # ADMIN"). Se siembra al primer boot si no hay clave ya guardada (BCrypt
+    # en BD, nunca la clave en logs); la rotación real es siempre explícita
+    # desde la UI ADMIN (POST /api/kiosco/config/rotar).
+    api-key: ${KIOSK_API_KEY:}
+
 logging:
   level:
     # En local, TRACE ayuda a depurar el filtro JWT/auth. En producción fijar

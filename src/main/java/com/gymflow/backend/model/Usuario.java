@@ -41,6 +41,16 @@ public class Usuario implements UserDetails {
     @Column(nullable = false)
     private boolean activo = true;
 
+    // Código de carnet (Fase 5): 6-8 caracteres, alfabeto sin 0/O/1/I para
+    // evitar ambigüedad visual (literal compartido con la migración 005 y
+    // CodigoCarnetGenerator). Se genera en AuthService.registrar con gating
+    // estricto y es rotable por ADMIN (UsuarioService.rotarCarnet). Estable
+    // de por vida; el acceso lo decide la suscripción al momento del
+    // check-in. NUNCA es clave de asistencias: el kiosco resuelve
+    // código → usuario en el momento, la rotación no toca historial.
+    @Column(name = "codigo_carnet", length = 8)
+    private String codigoCarnet;
+
     @Column(name = "creado_en")
     private LocalDateTime creadoEn;
 

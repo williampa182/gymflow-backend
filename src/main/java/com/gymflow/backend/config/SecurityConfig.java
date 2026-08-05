@@ -1,6 +1,7 @@
 package com.gymflow.backend.config;
 
 import com.gymflow.backend.security.auth.TimingSafeAuthenticationProvider;
+import com.gymflow.backend.security.filter.KioskRateLimitFilter;
 import com.gymflow.backend.security.filter.LoginRateLimitFilter;
 import com.gymflow.backend.security.jwt.JwtAuthFilter;
 import com.gymflow.backend.security.service.UserDetailsServiceImpl;
@@ -47,6 +48,7 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final LoginRateLimitFilter loginRateLimitFilter;
+    private final KioskRateLimitFilter kioskRateLimitFilter;
     private final UserDetailsServiceImpl userDetailsService;
     private final PasswordEncoder passwordEncoder;
 
@@ -89,12 +91,20 @@ public class SecurityConfig {
                 // porque el uso es verificación manual puntual, no un endpoint
                 // que deba quedar activo de forma permanente.
                 .requestMatchers("/api/v1/debug/**").permitAll()
+                // Fase 5, P4: el kiosco de recepción NO usa JWT — es la única
+                // excepción al "todo autenticado". Su credencial es el header
+                // X-Kiosk-Key, validada en el controller (KioscoConfigService
+                // → 401) con el rate limit doble del KioskRateLimitFilter.
+                // Sin este permitAll, el entry point respondería 401 antes de
+                // que nuestra validación de key corra.
+                .requestMatchers("/api/asistencias/kiosk").permitAll()
                 .anyRequest().authenticated()
             )
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
             .addFilterBefore(loginRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(kioskRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

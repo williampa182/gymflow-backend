@@ -1,5 +1,6 @@
 package com.gymflow.backend.controller;
 
+import com.gymflow.backend.dto.CarnetResponseDTO;
 import com.gymflow.backend.dto.UsuarioResponseDTO;
 import com.gymflow.backend.dto.request.CambioRolRequest;
 import com.gymflow.backend.model.enums.Rol;
@@ -48,6 +49,51 @@ class UsuarioControllerTest {
     void cambiarRol_tienePreAuthorizeSoloAdmin() throws NoSuchMethodException {
         Method method = UsuarioController.class.getMethod(
                 "cambiarRol", Long.class, CambioRolRequest.class);
+
+        assertThat(method.getAnnotation(PreAuthorize.class).value())
+                .isEqualTo("hasRole('ADMIN')");
+    }
+
+    @Test
+    void carnet_devuelve200_yDelegaEnElServicio() {
+        CarnetResponseDTO esperado = CarnetResponseDTO.builder()
+                .codigoCarnet("ABC123")
+                .nombre("Ana")
+                .build();
+        when(usuarioService.obtenerCarnet(7L)).thenReturn(esperado);
+
+        ResponseEntity<CarnetResponseDTO> respuesta = usuarioController.carnet(7L);
+
+        assertThat(respuesta.getStatusCode().value()).isEqualTo(200);
+        assertThat(respuesta.getBody()).isSameAs(esperado);
+        verify(usuarioService).obtenerCarnet(7L);
+    }
+
+    @Test
+    void carnet_tienePreAuthorizeSoloAdmin() throws NoSuchMethodException {
+        Method method = UsuarioController.class.getMethod("carnet", Long.class);
+
+        assertThat(method.getAnnotation(PreAuthorize.class).value())
+                .isEqualTo("hasRole('ADMIN')");
+    }
+
+    @Test
+    void rotarCarnet_devuelve200_yDelegaEnElServicio() {
+        CarnetResponseDTO esperado = CarnetResponseDTO.builder()
+                .codigoCarnet("XYZ789")
+                .build();
+        when(usuarioService.rotarCarnet(7L)).thenReturn(esperado);
+
+        ResponseEntity<CarnetResponseDTO> respuesta = usuarioController.rotarCarnet(7L);
+
+        assertThat(respuesta.getStatusCode().value()).isEqualTo(200);
+        assertThat(respuesta.getBody()).isSameAs(esperado);
+        verify(usuarioService).rotarCarnet(7L);
+    }
+
+    @Test
+    void rotarCarnet_tienePreAuthorizeSoloAdmin() throws NoSuchMethodException {
+        Method method = UsuarioController.class.getMethod("rotarCarnet", Long.class);
 
         assertThat(method.getAnnotation(PreAuthorize.class).value())
                 .isEqualTo("hasRole('ADMIN')");

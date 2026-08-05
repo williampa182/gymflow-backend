@@ -16,6 +16,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDate;
 
 @Service
@@ -25,6 +26,7 @@ public class SuscripcionService {
     private final SuscripcionRepository suscripcionRepository;
     private final UsuarioRepository usuarioRepository;
     private final PlanRepository planRepository;
+    private final Clock clock;
 
     @SuppressWarnings("null")
     @Transactional
@@ -89,7 +91,12 @@ public class SuscripcionService {
         suscripcionRepository.findByUsuarioIdAndEstado(usuario.getId(), EstadoSuscripcion.ACTIVA)
                 .ifPresent(s -> { throw new RuntimeException("El usuario ya tiene una suscripción activa"); });
 
-        LocalDate inicio = fechaInicio != null ? fechaInicio : LocalDate.now();
+        // "Hoy" sale del Clock de Bogotá (RelojBogotaConfig), NO de
+        // LocalDate.now() con la TZ del servidor: Railway corre UTC y un
+        // cliente que paga a las 23:30 Bogotá (04:30 UTC del día siguiente)
+        // nacería con fechaInicio de "mañana" sin este fix — no podría
+        // marcar el mismo día (Fase 5, regla 7).
+        LocalDate inicio = fechaInicio != null ? fechaInicio : LocalDate.now(clock);
 
         Suscripcion suscripcion = Suscripcion.builder()
                 .usuario(usuario)

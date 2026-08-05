@@ -1,5 +1,6 @@
 package com.gymflow.backend.controller;
 
+import com.gymflow.backend.dto.dashboard.AsistenciasSemanaStatsDTO;
 import com.gymflow.backend.dto.dashboard.DashboardAdminStatsResponse;
 import com.gymflow.backend.service.DashboardAdminService;
 import lombok.RequiredArgsConstructor;
@@ -20,5 +21,11 @@ public class DashboardAdminController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<DashboardAdminStatsResponse> obtenerEstadisticas() {
         return ResponseEntity.ok(dashboardAdminService.obtenerEstadisticas());
+    }
+
+    @GetMapping("/asistencias-semana")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<AsistenciasSemanaStatsDTO> obtenerAsistenciasSemana() {
+        return ResponseEntity.ok(dashboardAdminService.obtenerAsistenciasSemana());
     }
 }

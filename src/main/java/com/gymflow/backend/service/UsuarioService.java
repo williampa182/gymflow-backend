@@ -1,5 +1,6 @@
 package com.gymflow.backend.service;
 
+import com.gymflow.backend.dto.CarnetResponseDTO;
 import com.gymflow.backend.dto.UsuarioResponseDTO;
 import com.gymflow.backend.model.Usuario;
 import com.gymflow.backend.model.enums.Rol;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
+    private final CodigoCarnetGenerator codigoCarnetGenerator;
 
     public Page<UsuarioResponseDTO> listarUsuarios(Rol rol, Pageable pageable) {
         Page<Usuario> usuarios = (rol != null)
@@ -65,6 +67,42 @@ public class UsuarioService {
         usuario.setRol(rol);
         usuarioRepository.save(usuario);
         return toDTO(usuario);
+    }
+
+    /**
+     * Vista ADMIN del carnet (reimpresión; también para usuarios inactivos).
+     * El "sin código" es un 404 (recurso no existe), nunca un 500.
+     */
+    @SuppressWarnings("null")
+    @Transactional(readOnly = true)
+    public CarnetResponseDTO obtenerCarnet(Long id) {
+        Usuario usuario = usuarioRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con id: " + id));
+        if (usuario.getCodigoCarnet() == null) {
+            throw new RuntimeException("Código de carnet no encontrado para el usuario con id: " + id);
+        }
+        return CarnetResponseDTO.builder()
+                .codigoCarnet(usuario.getCodigoCarnet())
+                .nombre(usuario.getNombre())
+                .build();
+    }
+
+    /**
+     * Rotación por pérdida (POST /api/usuarios/{id}/carnet/rotar, ADMIN).
+     * Gating estricto contra el índice único: si el generador agota los
+     * reintentos lanza (500) y el código anterior queda intacto. El código
+     * NUNCA es clave de asistencias: rotarlo no toca el historial.
+     */
+    @SuppressWarnings("null")
+    @Transactional
+    public CarnetResponseDTO rotarCarnet(Long id) {
+        Usuario usuario = usuarioRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con id: " + id));
+        String nuevoCodigo = codigoCarnetGenerator.generarUnico(
+                codigo -> usuarioRepository.existsByCodigoCarnet(codigo));
+        usuario.setCodigoCarnet(nuevoCodigo);
+        usuarioRepository.save(usuario);
+        return CarnetResponseDTO.builder().codigoCarnet(nuevoCodigo).build();
     }
 
     private void asegurarQueNoSeaUltimoAdminActivo() {
