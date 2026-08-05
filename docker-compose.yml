@@ -6,7 +6,7 @@
 
 services:
   postgres:
-    image: postgres:16
+    image: postgres:18
     container_name: gymflow_postgres
     environment:
       POSTGRES_DB: gymflow_db
@@ -15,7 +15,10 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - gymflow_postgres_data:/var/lib/postgresql/data
+      # PG18+ cambió el layout: los datos viven en /var/lib/postgresql/<versión>/
+      # (docker-library PR #1259), por eso el volumen se monta en /var/lib/postgresql
+      # y no en /var/lib/postgresql/data como en 16.
+      - gymflow_postgres_data:/var/lib/postgresql
 
   redis:
     image: redis:7-alpine

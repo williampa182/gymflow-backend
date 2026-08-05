@@ -507,10 +507,12 @@ mejoras opcionales.
 
 1. **Verificar `requirepass` de Redis en Railway prod** — **CERRADO (2026-08-04)**: AUTH verificado contra el Redis de prod (PING autenticado ok) y la app opera con 200 (fail-closed no disparado). Ver `THREAT_MODEL.md` §1.1.
 
-2. **Alinear Postgres dev/CI/prod** — Railway corre Postgres 18, el
-   `docker-compose.yml` local sigue en 16. El backup de CI ya usa el cliente
-   18; subir dev a 18 elimina la divergencia latente de comportamiento
-   (ver `.github/workflows/backup.yml`).
+2. **Alinear Postgres dev/CI/prod** — **CERRADO (2026-08-04)**: Railway corre
+   Postgres 18 y ahora también lo hacen el `docker-compose.yml` local y el
+   CI (`backend-ci.yml`), con la suite verde sobre 18 (206 tests). Nota: la
+   imagen 18 cambió el layout de datos a `/var/lib/postgresql/<versión>/`
+   (docker-library PR #1259) — el volumen local se monta en `/var/lib/postgresql`.
+   El backup (`backup.yml`) ya usaba el cliente 18.
 
 3. **CSP completa con nonce (M2)** — mejora opcional de portafolio, diferida
    2026-08-01: ampliar `script-src`/`object-src`/`base-uri` con nonce.
