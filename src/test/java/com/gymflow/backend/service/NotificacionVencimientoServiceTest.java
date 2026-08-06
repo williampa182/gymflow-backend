@@ -18,7 +18,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,6 +36,9 @@ class NotificacionVencimientoServiceTest {
 
     private static final String CTA_BASE_URL = "http://localhost:3000";
     private static final String FROM = "no-reply@gymflow.com";
+    private static final Clock RELOJ_BOGOTA =
+            Clock.fixed(LocalDate.parse("2026-08-06").atTime(10, 0).atZone(ZoneId.of("America/Bogota")).toInstant(),
+                    ZoneId.of("America/Bogota"));
 
     @Mock
     private SuscripcionRepository suscripcionRepository;
@@ -46,7 +51,7 @@ class NotificacionVencimientoServiceTest {
     @BeforeEach
     void setUp() {
         notificacionVencimientoService = new NotificacionVencimientoService(
-                suscripcionRepository, emailClient, 7, CTA_BASE_URL, FROM);
+                suscripcionRepository, emailClient, RELOJ_BOGOTA, 7, CTA_BASE_URL, FROM);
     }
 
     private Usuario usuarioActivo(String email) {
@@ -157,7 +162,7 @@ class NotificacionVencimientoServiceTest {
     @Test
     void procesarVencimientos_laCtaNoQuedaConDobleSlashSiLaBaseTerminaEnSlash() {
         notificacionVencimientoService = new NotificacionVencimientoService(
-                suscripcionRepository, emailClient, 7, "http://localhost:3000/", FROM);
+                suscripcionRepository, emailClient, RELOJ_BOGOTA, 7, "http://localhost:3000/", FROM);
         Usuario usuario = usuarioActivo("cliente@gymflow.com");
         Plan plan = planMensual();
         Suscripcion suscripcion = activaPorVencer(1L, usuario, plan);

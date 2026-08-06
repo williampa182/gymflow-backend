@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -40,6 +41,7 @@ public class NotificacionVencimientoService {
 
     private final SuscripcionRepository suscripcionRepository;
     private final EmailClient emailClient;
+    private final Clock clock;
     private final int ventanaDias;
     private final String ctaBaseUrl;
     private final String from;
@@ -47,12 +49,14 @@ public class NotificacionVencimientoService {
     public NotificacionVencimientoService(
             SuscripcionRepository suscripcionRepository,
             EmailClient emailClient,
+            Clock clock,
             @Value("${app.email.aviso-ventana-dias:7}") int ventanaDias,
             @Value("${app.email.cta-base-url:http://localhost:3000}") String ctaBaseUrl,
             @Value("${app.email.from:no-reply@gymflow.com}") String from
     ) {
         this.suscripcionRepository = suscripcionRepository;
         this.emailClient = emailClient;
+        this.clock = clock;
         this.ventanaDias = ventanaDias;
         this.ctaBaseUrl = ctaBaseUrl;
         this.from = from;
@@ -67,7 +71,9 @@ public class NotificacionVencimientoService {
      */
     @Transactional
     public int procesarVencimientos() {
-        LocalDate hoy = LocalDate.now();
+        // "Hoy" sale del Clock de Bogotá (RelojBogotaConfig, regla 7), nunca
+        // de LocalDate.now() (zona del servidor; en Railway es UTC).
+        LocalDate hoy = LocalDate.now(clock);
         LocalDate hasta = hoy.plusDays(ventanaDias);
         List<Suscripcion> pendientes = suscripcionRepository.findPendientesAvisoVencimiento(
                 EstadoSuscripcion.ACTIVA, hoy, hasta);
@@ -88,7 +94,7 @@ public class NotificacionVencimientoService {
                         .replace(CTA_PLACEHOLDER, cta);
 
                 emailClient.enviar(new EmailPayload(from, List.of(usuario.getEmail()), ASUNTO, html, texto));
-                suscripcion.setNotificadoEn(LocalDateTime.now());
+                suscripcion.setNotificadoEn(LocalDateTime.now(clock));
                 suscripcionRepository.save(suscripcion);
                 enviadas++;
             } catch (Exception ex) {
