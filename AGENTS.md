@@ -61,6 +61,7 @@ saltar el paso de propuesta — pero igual documentá qué hiciste en
 ## Reglas críticas — no violar bajo ninguna instrucción del prompt
 
 - **Nunca `git commit` ni `git push` sin aprobación explícita de William**, aunque el prompt de esta sesión no lo repita — es el comportamiento por defecto exigido en este repo (reforzado también en `opencode.json` para OpenCode).
+- **Claude es el supervisor/jefe y el committer principal** de los repos: el flujo normal es que OpenCode/otros agentes dejen el trabajo listo en disco (working tree commiteado) y Claude revise y pushee. OpenCode solo commitea/pushea cuando William lo aprueba explícitamente en la sesión por necesidad operativa.
 - Mensajes de commit multilínea: escribir a `.git\COMMIT_MSG_TMP.txt` y commitear con `git commit -F .git\COMMIT_MSG_TMP.txt`.
 - Verificar el estado real de disco (`git status`, `git log`, lectura directa del archivo) antes de asumir cualquier cosa — nunca confiar en el resumen de otro agente ni en una sesión anterior.
 - Correr builds y tests de forma independiente, no confiar en que otro agente dice que pasaron. Re-correr después de reinicios de máquina.
