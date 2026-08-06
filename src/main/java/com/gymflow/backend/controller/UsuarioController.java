@@ -58,4 +58,11 @@ public class UsuarioController {
     public ResponseEntity<CarnetResponseDTO> rotarCarnet(@PathVariable Long id) {
         return ResponseEntity.ok(usuarioService.rotarCarnet(id));
     }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> eliminar(@PathVariable Long id) {
+        usuarioService.eliminar(id);
+        return ResponseEntity.noContent().build();
+    }
 }

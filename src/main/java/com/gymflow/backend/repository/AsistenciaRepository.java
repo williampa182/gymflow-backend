@@ -25,6 +25,10 @@ public interface AsistenciaRepository extends JpaRepository<Asistencia, Long> {
 
     Page<Asistencia> findByUsuarioId(Long usuarioId, Pageable pageable);
 
+    // Borrado de usuarios (ADMIN): limpia los hijos del usuario antes de
+    // borrarlo (FKs sin cascada en la BD). Derived query.
+    void deleteByUsuarioId(Long usuarioId);
+
     @Query("""
             select a.fecha as fecha, count(a) as cantidad
             from Asistencia a

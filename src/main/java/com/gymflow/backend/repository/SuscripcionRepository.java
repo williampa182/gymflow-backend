@@ -22,6 +22,10 @@ public interface SuscripcionRepository extends JpaRepository<Suscripcion, Long> 
     Page<Suscripcion> findByEstado(EstadoSuscripcion estado, Pageable pageable);
     Optional<Suscripcion> findByUsuarioIdAndEstado(Long usuarioId, EstadoSuscripcion estado);
 
+    // Borrado de usuarios (ADMIN): limpia las suscripciones del usuario
+    // antes de borrarlo (FK sin cascada). Derived query.
+    void deleteByUsuarioId(Long usuarioId);
+
     /**
      * Suscripciones ACTIVAS de un conjunto de usuarios en una sola query
      * (aplanar el N+1 de EntrenadorService.listarClientesElegibles). El

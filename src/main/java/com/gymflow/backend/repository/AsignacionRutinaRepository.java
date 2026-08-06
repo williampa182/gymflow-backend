@@ -14,6 +14,12 @@ public interface AsignacionRutinaRepository extends JpaRepository<AsignacionRuti
 
     Optional<AsignacionRutina> findByClienteIdAndRutinaId(Long clienteId, Long rutinaId);
 
+    // Borrado de usuarios (ADMIN): como cliente y como entrenador (por las
+    // rutinas que le pertenecen y están asignadas). Derived queries.
+    void deleteByClienteId(Long clienteId);
+
+    void deleteByRutinaIdIn(java.util.Collection<Long> rutinaIds);
+
     /**
      * Todas las asignaciones de las rutinas de un entrenador, con el
      * cliente resuelto (join fetch) para no disparar N+1 al leer los

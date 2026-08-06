@@ -12,6 +12,10 @@ public interface RutinaRepository extends JpaRepository<Rutina, Long> {
 
     List<Rutina> findByEntrenadorIdOrderByCreadoEnDesc(Long entrenadorId);
 
+    // Borrado de usuarios (ADMIN): las rutinas del entrenador que se borra
+    // (los ejercicios se van con ellas vía orphanRemoval). Derived query.
+    void deleteByEntrenadorId(Long entrenadorId);
+
     Optional<Rutina> findByIdAndEntrenadorId(Long id, Long entrenadorId);
 
     /**

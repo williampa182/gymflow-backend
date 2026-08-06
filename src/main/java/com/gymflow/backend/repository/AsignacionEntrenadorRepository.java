@@ -12,6 +12,10 @@ public interface AsignacionEntrenadorRepository extends JpaRepository<Asignacion
 
     List<AsignacionEntrenador> findByEntrenadorIdAndActivaTrueOrderByAsignadoEnDesc(Long entrenadorId);
 
+    // Borrado de usuarios (ADMIN): como cliente o como entrenador.
+    // Derived query.
+    void deleteByClienteIdOrEntrenadorId(Long clienteId, Long entrenadorId);
+
     /**
      * Para cancelar: solo el entrenador que creó la asignación puede
      * cancelarla (ownership verificado en EntrenadorService).

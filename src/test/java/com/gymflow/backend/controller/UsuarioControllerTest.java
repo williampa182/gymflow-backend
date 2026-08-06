@@ -98,4 +98,21 @@ class UsuarioControllerTest {
         assertThat(method.getAnnotation(PreAuthorize.class).value())
                 .isEqualTo("hasRole('ADMIN')");
     }
+
+    @Test
+    void eliminar_devuelve204_yDelegaEnElServicio() {
+        ResponseEntity<Void> respuesta = usuarioController.eliminar(7L);
+
+        assertThat(respuesta.getStatusCode().value()).isEqualTo(204);
+        assertThat(respuesta.getBody()).isNull();
+        verify(usuarioService).eliminar(7L);
+    }
+
+    @Test
+    void eliminar_tienePreAuthorizeSoloAdmin() throws NoSuchMethodException {
+        Method method = UsuarioController.class.getMethod("eliminar", Long.class);
+
+        assertThat(method.getAnnotation(PreAuthorize.class).value())
+                .isEqualTo("hasRole('ADMIN')");
+    }
 }

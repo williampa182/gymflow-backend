@@ -155,7 +155,7 @@ public class GlobalExceptionHandler {
         // El recurso pedido existe pero no está usable → 409, igual que el
         // duplicado de suscripción activa.
         if (m.contains("no está disponible")) return HttpStatus.CONFLICT;
-        if (m.contains("propio rol") || m.contains("admin activo")) return HttpStatus.BAD_REQUEST;
+        if (m.contains("propio rol") || m.contains("propio usuario") || m.contains("admin activo")) return HttpStatus.BAD_REQUEST;
         // Fase 4: ownership de rutinas/asignaciones. El recurso existe pero
         // no le pertenece a quien lo toca → 403, no 500 ni 404 (no revelar
         // existencia no alcanza: el mensaje ya identifica la acción).

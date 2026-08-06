@@ -2,8 +2,14 @@ package com.gymflow.backend.service;
 
 import com.gymflow.backend.dto.CarnetResponseDTO;
 import com.gymflow.backend.dto.UsuarioResponseDTO;
+import com.gymflow.backend.model.Rutina;
 import com.gymflow.backend.model.Usuario;
 import com.gymflow.backend.model.enums.Rol;
+import com.gymflow.backend.repository.AsignacionEntrenadorRepository;
+import com.gymflow.backend.repository.AsignacionRutinaRepository;
+import com.gymflow.backend.repository.AsistenciaRepository;
+import com.gymflow.backend.repository.RutinaRepository;
+import com.gymflow.backend.repository.SuscripcionRepository;
 import com.gymflow.backend.repository.UsuarioRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +40,21 @@ class UsuarioServiceTest {
 
     @Mock
     private CodigoCarnetGenerator codigoCarnetGenerator;
+
+    @Mock
+    private AsistenciaRepository asistenciaRepository;
+
+    @Mock
+    private AsignacionRutinaRepository asignacionRutinaRepository;
+
+    @Mock
+    private RutinaRepository rutinaRepository;
+
+    @Mock
+    private AsignacionEntrenadorRepository asignacionEntrenadorRepository;
+
+    @Mock
+    private SuscripcionRepository suscripcionRepository;
 
     @InjectMocks
     private UsuarioService usuarioService;
@@ -225,6 +246,102 @@ class UsuarioServiceTest {
         assertThat(resultado.isActivo()).isFalse();
         verify(usuarioRepository).countByRolAndActivo(Rol.ADMIN, true);
         verify(usuarioRepository).save(usuario);
+    }
+
+    @Test
+    void eliminar_clienteConDependencias_limpiaHijosEnOrdenYPadre() {
+        Usuario cliente = usuario(2L, "cliente@gymflow.test", Rol.CLIENTE, true);
+        autenticarComo("william@gymflow.com");
+        when(usuarioRepository.findById(2L)).thenReturn(Optional.of(cliente));
+
+        usuarioService.eliminar(2L);
+
+        verify(asistenciaRepository).deleteByUsuarioId(2L);
+        verify(asignacionRutinaRepository).deleteByClienteId(2L);
+        verify(rutinaRepository).deleteByEntrenadorId(2L);
+        verify(asignacionEntrenadorRepository).deleteByClienteIdOrEntrenadorId(2L, 2L);
+        verify(suscripcionRepository).deleteByUsuarioId(2L);
+        verify(usuarioRepository).delete(cliente);
+    }
+
+    @Test
+    void eliminar_entrenadorConRutinasAsignadas_borraAsignacionesDeSusRutinas() {
+        Usuario entrenador = usuario(2L, "entrenador@gymflow.test", Rol.ENTRENADOR, true);
+        Rutina rutina = Rutina.builder().id(10L).build();
+        autenticarComo("william@gymflow.com");
+        when(usuarioRepository.findById(2L)).thenReturn(Optional.of(entrenador));
+        when(rutinaRepository.findByEntrenadorIdOrderByCreadoEnDesc(2L))
+                .thenReturn(List.of(rutina));
+
+        usuarioService.eliminar(2L);
+
+        verify(asignacionRutinaRepository).deleteByRutinaIdIn(List.of(10L));
+        verify(rutinaRepository).deleteByEntrenadorId(2L);
+        verify(usuarioRepository).delete(entrenador);
+    }
+
+    @Test
+    void eliminar_entrenadorSinRutinas_noLlamaDeletePorIds() {
+        Usuario entrenador = usuario(2L, "entrenador@gymflow.test", Rol.ENTRENADOR, true);
+        autenticarComo("william@gymflow.com");
+        when(usuarioRepository.findById(2L)).thenReturn(Optional.of(entrenador));
+        when(rutinaRepository.findByEntrenadorIdOrderByCreadoEnDesc(2L)).thenReturn(List.of());
+
+        usuarioService.eliminar(2L);
+
+        verify(asignacionRutinaRepository, never()).deleteByRutinaIdIn(any());
+        verify(rutinaRepository).deleteByEntrenadorId(2L);
+        verify(usuarioRepository).delete(entrenador);
+    }
+
+    @Test
+    void eliminar_rechazaAutoBorradoDelAdminAutenticado() {
+        autenticarComo(usuario.getEmail());
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+
+        assertThatThrownBy(() -> usuarioService.eliminar(1L))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("propio usuario");
+
+        verify(usuarioRepository, never()).delete(any());
+    }
+
+    @Test
+    void eliminar_rechazaBorrarAlUltimoAdminActivo() {
+        autenticarComo("otro-admin@gymflow.test");
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.countByRolAndActivo(Rol.ADMIN, true)).thenReturn(1L);
+
+        assertThatThrownBy(() -> usuarioService.eliminar(1L))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("ltimo ADMIN");
+
+        verify(usuarioRepository, never()).delete(any());
+    }
+
+    @Test
+    void eliminar_adminInactivoNoDisparaLaGuardaDeAdminsActivos() {
+        usuario.setActivo(false);
+        autenticarComo("otro-admin@gymflow.test");
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+
+        usuarioService.eliminar(1L);
+
+        verify(usuarioRepository, never()).countByRolAndActivo(any(), anyBoolean());
+        verify(usuarioRepository).delete(usuario);
+    }
+
+    @Test
+    void eliminar_usuarioNoEncontrado_lanzaExcepcion() {
+        autenticarComo("william@gymflow.com");
+        when(usuarioRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> usuarioService.eliminar(99L))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Usuario no encontrado");
+
+        verifyNoInteractions(asistenciaRepository, asignacionRutinaRepository,
+                rutinaRepository, asignacionEntrenadorRepository, suscripcionRepository);
     }
 
     @Test
