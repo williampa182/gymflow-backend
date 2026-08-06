@@ -8,10 +8,9 @@ import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.TestPropertySource;
-
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -20,67 +19,88 @@ import static org.assertj.core.api.Assertions.assertThat;
  * resuelve la IP del cliente correctamente contra la matriz de escenarios de
  * collab/propuestas/2026-07-24-propuesta-fix-threat-model-2.2-v2-tomcat-native.md
  *
- * Usa /api/v1/debug/headers (gateado por app.debug-headers.enabled, activado
- * acá solo para este test) para observar qué IP resolvió Tomcat como
- * request.getRemoteAddr() tras pasar por el valve.
+ * Observa el comportamiento en vez de un endpoint de diagnóstico (el
+ * DiagnosticHeaderController se eliminó el 2026-08-06): LoginRateLimitFilter
+ * lleva un bucket de rate limit por IP YA RESUELTA por el valve
+ * ("ratelimit:auth:login:<ip>"), así que el estado del bucket expone qué IP
+ * resolvió Tomcat tras procesar X-Forwarded-For.
+ *
+ * Matriz: un X-Forwarded-For inyectado no debe crear buckets nuevos ni
+ * evadir el rate limit; la resolución es rightmost-no-interno.
  *
  * En estos tests, la conexión TCP real del cliente HTTP de prueba es
  * 127.0.0.1 (loopback) — que matchea internal-proxies, por lo que el valve
  * SIEMPRE confía y procesa X-Forwarded-For. Esto simula correctamente el
  * caso "request llega a través del proxy interno de Railway".
+ *
+ * Nota: cada test usa IPs X-Forwarded-For únicas para que los buckets de
+ * Redis (ventana de 1 minuto) no se contaminen entre tests ni con la IP
+ * loopback real de otras clases de integración.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureTestRestTemplate
-@TestPropertySource(properties = "app.debug-headers.enabled=true")
+@TestPropertySource(properties = "app.security.auth-rate-limit.max-per-minute=3")
 class RemoteIpValveIntegrationTest {
 
     @Autowired
     private TestRestTemplate restTemplate;
 
-    @SuppressWarnings("unchecked")
-    private String remoteAddrPara(String xForwardedFor) {
+    /** Login con credenciales inválidas: 401 dentro del límite, 429 al agotar el bucket de la IP resuelta. */
+    private int loginConXff(String xff) {
         HttpHeaders headers = new HttpHeaders();
-        if (xForwardedFor != null) {
-            headers.set("X-Forwarded-For", xForwardedFor);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        if (xff != null) {
+            headers.set("X-Forwarded-For", xff);
         }
-        ResponseEntity<Map> response = restTemplate.exchange(
-                "/api/v1/debug/headers", HttpMethod.GET, new HttpEntity<>(headers), Map.class);
-        assertThat(response.getStatusCode().value()).isEqualTo(200);
-        return (String) response.getBody().get("remoteAddr");
+        ResponseEntity<String> response = restTemplate.exchange(
+                "/api/auth/login",
+                HttpMethod.POST,
+                new HttpEntity<>("{\"email\":\"x@y.z\",\"password\":\"incorrecta\"}", headers),
+                String.class);
+        return response.getStatusCode().value();
+    }
+
+    private void agotarBucketDe(String xff) {
+        for (int i = 0; i < 3; i++) {
+            assertThat(loginConXff(xff)).isEqualTo(401);
+        }
     }
 
     @Test
-    void sinHeaderXForwardedFor_devuelveIpDeConexionDirecta() {
-        // Sin XFF, no hay nada que resolver: queda la IP de la conexión TCP real.
-        assertThat(remoteAddrPara(null)).isEqualTo("127.0.0.1");
-    }
-
-    @Test
-    void headerSimpleConIpPublica_resuelveEsaIp() {
+    void headerSimpleConIpPublica_tieneBucketPropioYAgota() {
         // Escenario 1 de la propuesta: tráfico legítimo vía proxy de Railway.
-        assertThat(remoteAddrPara("203.0.113.50")).isEqualTo("203.0.113.50");
+        // El valve resuelve 203.0.113.50 → su bucket se agota y responde 429.
+        agotarBucketDe("203.0.113.50");
+        assertThat(loginConXff("203.0.113.50")).isEqualTo(429);
     }
 
     @Test
-    void spoofingLeftmost_ignoraElValorInyectadoAlPrincipio() {
-        // Escenario 2: atacante intenta anteponer una IP falsa. RemoteIpValve
-        // lee de derecha a izquierda: toma 203.0.113.50 (rightmost, no
-        // interno), nunca llega a evaluar 1.1.1.1.
-        assertThat(remoteAddrPara("1.1.1.1, 203.0.113.50")).isEqualTo("203.0.113.50");
+    void spoofingLeftmost_noCreaBucketNuevoNiEvadeElLimite() {
+        // Escenario 2: atacante antepone una IP falsa. RemoteIpValve lee de
+        // derecha a izquierda: toma 203.0.113.51 (rightmost, no interno) y
+        // nunca evalúa 1.1.1.1 → el spoof comparte el bucket de la IP real
+        // (sigue bloqueado) y no abre un bucket paralelo por 1.1.1.1.
+        agotarBucketDe("203.0.113.51");
+        assertThat(loginConXff("1.1.1.1, 203.0.113.51")).isEqualTo(429);
+        assertThat(loginConXff("203.0.113.55")).isEqualTo(401);
     }
 
     @Test
     void multiHopInyectado_resuelveElUltimoValorNoInterno() {
         // Escenario 3: múltiples IPs falsas antepuestas, incluso otras
-        // públicas. Sigue resolviendo el rightmost no interno.
-        assertThat(remoteAddrPara("8.8.8.8, 1.1.1.1, 203.0.113.50")).isEqualTo("203.0.113.50");
+        // públicas. Sigue resolviendo el rightmost no interno (203.0.113.52)
+        // y 8.8.8.8 queda ignorada (su bucket no se toca).
+        agotarBucketDe("203.0.113.52");
+        assertThat(loginConXff("8.8.8.8, 1.1.1.1, 203.0.113.52")).isEqualTo(429);
+        assertThat(loginConXff("8.8.8.8")).isEqualTo(401);
     }
 
     @Test
     void saltoInternoAlFinal_descartaHopsInternosYResuelveElPublico() {
         // Simula un hop interno adicional agregado DESPUÉS de la IP real del
         // cliente en la cadena. El valve debe descartar 10.0.0.5 (interno) y
-        // seguir a la izquierda hasta encontrar 203.0.113.50 (no interno).
-        assertThat(remoteAddrPara("203.0.113.50, 10.0.0.5")).isEqualTo("203.0.113.50");
+        // seguir a la izquierda hasta 203.0.113.54 → mismo bucket, bloqueado.
+        agotarBucketDe("203.0.113.54");
+        assertThat(loginConXff("203.0.113.54, 10.0.0.5")).isEqualTo(429);
     }
 }

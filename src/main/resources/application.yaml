@@ -169,9 +169,6 @@ app:
     # justifica priorizar UX sobre consistencia del threat model.
     reveal-email-exists-on-register: ${REVEAL_EMAIL_EXISTS:false}
 
-  debug-headers:
-    enabled: ${APP_DEBUG_HEADERS_ENABLED:false}
-
   # Feature 1 del portafolio (chatbot de soporte, ver
   # collab/propuestas/claude/features-portafolio.md). Placeholder de
   # desarrollo SOLO válido para que el ApplicationContext levante en tests

@@ -48,7 +48,7 @@ client/           ChatCompletionClient (interfaz), GeminiChatCompletionClient,
                   EmailClient, ResendEmailClient, EmailEnvioException, EmailPayload
 config/           SecurityConfig, SwaggerConfig
 controller/       AuthController, PlanController, SuscripcionController, UsuarioController,
-                  DashboardAdminController, ChatController, DiagnosticHeaderController
+                  DashboardAdminController, ChatController
 dto/              request/, response/, dashboard/, PlanRequestDTO, PlanResponseDTO, etc.
 exception/        GlobalExceptionHandler (@RestControllerAdvice)
 model/            Usuario, Plan, Suscripcion + enums/ (Rol, TipoPlan, EstadoSuscripcion)
@@ -109,8 +109,7 @@ validation/       NotCommonPassword, NotCommonPasswordValidator
 **`/api/chat`** (`ChatController`, agregado 2026-07-26) — **cualquier usuario autenticado**:
 - `POST /api/chat` — chatbot de soporte con RAG simple sobre los planes + guía del dashboard (ver §2.10). Rate limited con `ChatRateLimitFilter` (Redis), kill-switch `app.chat.enabled` → 503.
 
-**`/api/v1/debug`** (`DiagnosticHeaderController`, agregado 2026-07-24) — **temporal**:
-- `GET /api/v1/debug/headers` — devuelve `remoteAddr` y todos los headers (verificación del fix 2.2, X-Forwarded-For). Solo se registra si `app.debug-headers.enabled=true` (default `false`, vía `@ConditionalOnProperty`); candidato a eliminación cuando cumpla su función.
+**`/api/v1/debug`** — **ELIMINADO 2026-08-06** (`DiagnosticHeaderController`, temporal del fix 2.2, agregado 2026-07-24): la verificación de X-Forwarded-For/RemoteIpValve vive ahora como test de comportamiento end-to-end (`RemoteIpValveIntegrationTest`, observa los buckets de rate limit por IP resuelta) y la matriz de escenarios quedó documentada en la propuesta del fix 2.2.
 
 **Actuator** (agregado 2026-07-07, ver §6):
 - `GET /actuator/health`, `/actuator/info` — públicos
@@ -408,7 +407,6 @@ Postgres/Redis estén arriba, falla el arranque.
 | `REVEAL_EMAIL_EXISTS` | `false` | `true` solo si el contexto justifica priorizar UX sobre el threat model (decisión 07-16) |
 | `ALLOWED_ORIGINS` | `http://localhost:3000` | En Railway: URL(s) real(es) del frontend separadas por coma |
 | `SWAGGER_ENABLED` | `false` | `true` solo en dev/staging para la UI de Swagger (gateado, fix §2) |
-| `APP_DEBUG_HEADERS_ENABLED` | `false` | Endpoint de diagnóstico temporal `/api/v1/debug/headers` (fix 2.2) |
 | `APP_CHAT_ENABLED` | `true` | Kill-switch del chatbot; `false` → 503 |
 | `APP_CHAT_PROVIDER` | `gemini` | `gemini` \| `anthropic` — cambiar solo esta property |
 | `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` | placeholder dev-only | En prod: API key real del proveedor activo |
@@ -532,8 +530,10 @@ mejoras opcionales.
    urgente, pero vale la pena rotarlas.
 
 7. **`DiagnosticHeaderController`** (`/api/v1/debug/headers`) — temporal del
-   fix 2.2, gateado por `APP_DEBUG_HEADERS_ENABLED` (default false);
-   candidato a eliminación cuando cumpla su función.
+   fix 2.2 — **CERRADO 2026-08-06**: controlador, test y property
+   `APP_DEBUG_HEADERS_ENABLED` eliminados; `RemoteIpValveIntegrationTest`
+   reescrito como test de comportamiento (buckets de rate limit por IP
+   resuelta).
 
 8. **User journeys sin verificar en producción** — viajes 3 y 4 de
    `docs/USER_JOURNEYS.md`; decidir si hace falta el endpoint de cambio de
