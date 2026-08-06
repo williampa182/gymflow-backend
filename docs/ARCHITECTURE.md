@@ -1,8 +1,8 @@
 # GymFlow — Arquitectura técnica completa
 
-> Documento vivo. Última actualización: 2026-08-01 (migración a Spring Boot
-> 4.1.0, deploy a Railway, chatbot, notificaciones Resend — ver §2.1, §2.10,
-> §2.11 y §7). Pensado para que cualquier sesión futura (con Claude, otra IA,
+> Documento vivo. Última actualización: 2026-08-06 (cierre §7: M2 CSP nonce,
+> eliminar `DiagnosticHeaderController`/fix 2.2, Postgres 18 alineado, T2
+> usuarios de prueba — ver §7). Pensado para que cualquier sesión futura (con Claude, otra IA,
 > u otro desarrollador) tenga el contexto técnico completo de una sola
 > lectura, sin depender de memoria de conversación. Para el estado de
 > seguridad vigente, el source of truth es [`THREAT_MODEL.md`](THREAT_MODEL.md)
@@ -499,7 +499,7 @@ tests, no solo que el código de producción compile.
 
 ## 7. Pendientes conocidos (con contexto de por qué)
 
-Estado al 2026-08-01. Los pendientes históricos de abajo (migración a Boot 4
+Estado al 2026-08-06. Los pendientes históricos de abajo (migración a Boot 4
 y deploy a Railway) están **cerrados**; quedan pocos ítems de verificación y
 mejoras opcionales.
 
@@ -512,9 +512,12 @@ mejoras opcionales.
    (docker-library PR #1259) — el volumen local se monta en `/var/lib/postgresql`.
    El backup (`backup.yml`) ya usaba el cliente 18.
 
-3. **CSP completa con nonce (M2)** — mejora opcional de portafolio, diferida
-   2026-08-01: ampliar `script-src`/`object-src`/`base-uri` con nonce.
-   Requiere testeo real con los scripts inline de Next.
+3. **CSP completa con nonce (M2)** — **CERRADO (2026-08-04)**: CSP con
+   `script-src 'self' 'nonce-…' 'strict-dynamic'` servida desde `proxy.ts`
+   del frontend (nonce por request, headers `Content-Security-Policy` +
+   `x-nonce` en todas las respuestas HTML). E2E de headers en
+   `e2e/security-headers.spec.ts`; tests en `src/proxy.test.ts`. Los nonces
+   se aplican automáticamente a los scripts SSR de Next.
 
 4. **Housekeeping de dependencias frontend** — **CERRADO (2026-08-05)**:
    bumps aplicados: `eslint-config-next 16.2.12`, `@types/react 19.2.18`,
@@ -539,13 +542,19 @@ mejoras opcionales.
    `docs/USER_JOURNEYS.md`; decidir si hace falta el endpoint de cambio de
    rol (hoy solo SQL directo).
 
-9. **`gzip` no disponible por defecto en PowerShell de Windows** — el script
-   `backup-local.ps1` cae a dejar el `.sql` sin comprimir si no detecta
-   `gzip` en el PATH. No es un bug, es el comportamiento de respaldo
-   diseñado a propósito, pero vale la pena instalar Git Bash/WSL si se
-   quiere compresión real en los backups locales.
+9. **Pentesting real (OWASP ZAP)** — escaneo pasivo contra prod + activo
+   contra local (con fixture); interpretación contra `THREAT_MODEL.md`.
 
-10. **`py`/`python` no quedaron en el PATH del sistema** tras la instalación
+10. **Rotar credenciales filtradas en chat (T1)** — API key de Gemini y
+    token `gho_` de GitHub (ítem 6, pendiente de William).
+
+11. **`gzip` no disponible por defecto en PowerShell de Windows** — el script
+    `backup-local.ps1` cae a dejar el `.sql` sin comprimir si no detecta
+    `gzip` en el PATH. No es un bug, es el comportamiento de respaldo
+    diseñado a propósito, pero vale la pena instalar Git Bash/WSL si se
+    quiere compresión real en los backups locales.
+
+12. **`py`/`python` no quedaron en el PATH del sistema** tras la instalación
     vía winget en la máquina de desarrollo — se invocan con ruta completa
     (`%LOCALAPPDATA%\Microsoft\WindowsApps\py.exe`) o `py -m <módulo>`.
     Pendiente menor: arreglar el PATH vía GUI de variables de entorno si se
@@ -563,6 +572,12 @@ mejoras opcionales.
   `NEXT_PUBLIC_APP_ORIGIN`, `SPRING_PROFILES_ACTIVE=prod`, `DDL_AUTO=validate`
   (supuesto operativo: verificar en consola), backup `PROD_DATABASE_URL`
   activo.
+- **Limpieza de usuarios de prueba en prod (T2)** — ejecutada 2026-08-06 con
+  backup fresco (`gymflow_prod_20260806_215858.sql.gz`, drill de restore
+  probado contra BD local temporal) + `scripts/limpiar_usuarios_prueba.sql`:
+  borrados `smoketest.gymflow.20260804@example.com` y
+  `triage.checkin.20260806@test.local`. Prod queda con 3 usuarios
+  (william ADMIN + 2 smoketests reales).
 - **Timeouts a clientes externos** — pendiente de la Fase 5 original:
   aplicados 2026-08-01 (fix M1, connect 3s/read 30s en Gemini/Anthropic/
   Resend). Circuit breakers hacia Postgres/Redis siguen fuera de scope para

@@ -86,7 +86,8 @@ solo enlaza a la estructura y al estado vigente, no a cada archivo nuevo.
 
 ## Stack
 
-Spring Boot 4.1.0 + Java 21 + Maven + PostgreSQL 16 + Redis 7 + Docker.
+Spring Boot 4.1.0 + Java 21 + Maven + PostgreSQL 18 (dev/CI/prod alineados)
++ Redis 7 + Docker.
 Paquete base: `com.gymflow.backend`. API en `localhost:8080`. Migrado desde
 Spring Boot 3.5.16 (PR #10) — si ves código o docs de referencia viejos,
 ojo con el breaking change de Spring Security 7 en el constructor de
