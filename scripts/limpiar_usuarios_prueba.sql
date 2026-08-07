@@ -13,6 +13,7 @@
 --   - smoketest.gymflow.20260804@example.com (smoke test 04/08; carnet NHPTUJC)
 --   - qa.05082026@test.local             (QA visual 05/08; rol CLIENTE)
 --   - triage.checkin.20260806@test.local (triaje H2 06/08; rol CLIENTE)
+--   - journey.t5.20260806@test.local     (verificación T5 journeys 3+4, 06/08; id=9, rol CLIENTE)
 --
 -- Orden de borrado por FKs (todas NO ACTION, sin cascada): hijos → padre.
 -- Transaccional: si algo falla, ROLLBACK completo. Reejecutable sin riesgo
@@ -23,13 +24,14 @@
 
 BEGIN;
 
--- Verificación previa: cuántos y cuáles se van a tocar (debe listar 3).
+-- Verificación previa: cuántos y cuáles se van a tocar (debe listar 4).
 SELECT id, email, rol, codigo_carnet, activo
 FROM usuarios
 WHERE email IN (
     'smoketest.gymflow.20260804@example.com',
     'qa.05082026@test.local',
-    'triage.checkin.20260806@test.local'
+    'triage.checkin.20260806@test.local',
+    'journey.t5.20260806@test.local'
 );
 
 -- Hijos: asistencias (check-ins) de esos usuarios.
@@ -39,7 +41,8 @@ WHERE usuario_id IN (
     WHERE email IN (
         'smoketest.gymflow.20260804@example.com',
         'qa.05082026@test.local',
-        'triage.checkin.20260806@test.local'
+        'triage.checkin.20260806@test.local',
+        'journey.t5.20260806@test.local'
     )
 );
 
@@ -53,7 +56,8 @@ WHERE rutina_id IN (
         WHERE email IN (
             'smoketest.gymflow.20260804@example.com',
             'qa.05082026@test.local',
-            'triage.checkin.20260806@test.local'
+            'triage.checkin.20260806@test.local',
+            'journey.t5.20260806@test.local'
         )
     )
 );
@@ -64,7 +68,8 @@ WHERE cliente_id IN (
     WHERE email IN (
         'smoketest.gymflow.20260804@example.com',
         'qa.05082026@test.local',
-        'triage.checkin.20260806@test.local'
+        'triage.checkin.20260806@test.local',
+        'journey.t5.20260806@test.local'
     )
 );
 
@@ -74,7 +79,8 @@ WHERE entrenador_id IN (
     WHERE email IN (
         'smoketest.gymflow.20260804@example.com',
         'qa.05082026@test.local',
-        'triage.checkin.20260806@test.local'
+        'triage.checkin.20260806@test.local',
+        'journey.t5.20260806@test.local'
     )
 );
 
@@ -85,7 +91,8 @@ WHERE cliente_id IN (
     WHERE email IN (
         'smoketest.gymflow.20260804@example.com',
         'qa.05082026@test.local',
-        'triage.checkin.20260806@test.local'
+        'triage.checkin.20260806@test.local',
+        'journey.t5.20260806@test.local'
     )
 )
 OR entrenador_id IN (
@@ -93,7 +100,8 @@ OR entrenador_id IN (
     WHERE email IN (
         'smoketest.gymflow.20260804@example.com',
         'qa.05082026@test.local',
-        'triage.checkin.20260806@test.local'
+        'triage.checkin.20260806@test.local',
+        'journey.t5.20260806@test.local'
     )
 );
 
@@ -104,7 +112,8 @@ WHERE usuario_id IN (
     WHERE email IN (
         'smoketest.gymflow.20260804@example.com',
         'qa.05082026@test.local',
-        'triage.checkin.20260806@test.local'
+        'triage.checkin.20260806@test.local',
+        'journey.t5.20260806@test.local'
     )
 );
 
@@ -113,7 +122,8 @@ DELETE FROM usuarios
 WHERE email IN (
     'smoketest.gymflow.20260804@example.com',
     'qa.05082026@test.local',
-    'triage.checkin.20260806@test.local'
+    'triage.checkin.20260806@test.local',
+    'journey.t5.20260806@test.local'
 );
 
 -- Verificación posterior: debe devolver 0 filas.
@@ -121,7 +131,8 @@ SELECT id, email FROM usuarios
 WHERE email IN (
     'smoketest.gymflow.20260804@example.com',
     'qa.05082026@test.local',
-    'triage.checkin.20260806@test.local'
+    'triage.checkin.20260806@test.local',
+    'journey.t5.20260806@test.local'
 );
 
 COMMIT;

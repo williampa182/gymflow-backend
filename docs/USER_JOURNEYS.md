@@ -33,6 +33,8 @@ local como contra producción (Railway) — `e2e/registro.spec.ts` en
    `/dashboard/usuarios` (resolución C02, 2026-08-03).
 
 **Estado:** verificado (2026-08-03): endpoint + guard + UI + tests.
+Checkbox "decidir si Journey 2 necesita endpoint de cambio de rol" resuelto:
+ya existe `PATCH /api/usuarios/{id}/rol` implementado y funcional.
 
 ## 3. Cliente se suscribe a un plan
 1. Login como CLIENTE.
@@ -41,20 +43,50 @@ local como contra producción (Railway) — `e2e/registro.spec.ts` en
 4. Ve su suscripción activa reflejada en su panel.
 5. (Admin) ve esa suscripción reflejada en `/dashboard/admin/estadisticas`.
 
-**Estado:** verificado en Fase 3/4, pero no re-verificado en producción (Railway)
-después del deploy. Pendiente re-confirmar en producción.
+**Estado:** ✅ verificado en producción (Railway) — T5, 2026-08-06.
+Playwright headless contra `https://gymflow-frontend-production.up.railway.app`.
+Usuario de prueba: `journey.t5.20260806@test.local` (id=9, rol CLIENTE).
+Evidencia en `collab/evidencia/qa-visual/2026-08-06-journeys-3-4/`:
+  - `01-s0-register-page.png` … `03-s0-registered-dashboard.png`: registro OK
+  - `04-s1-planes-list.png`: lista de planes visible con botón "Inscribirme"
+  - `05-s2-after-inscribir-click.png` … `08-s2-subscribed.png`: inscripción + modal "Pagar (demo)" OK
+  - `09-s3-dashboard-cliente.png`, `10-s3-planes-post-sub.png`: dashboard post-suscripción OK
+Paso 5 (admin ve estadísticas): ✅ verificado (2026-08-07, T5) — el admin
+ve el resumen en `/dashboard` (usuarios por rol, suscripciones por estado,
+ingresos). Nota: `/dashboard/admin/estadisticas` NO existe como ruta (404)
+— las estadísticas viven en el dashboard admin; el script de verificación
+de T5 usaba la ruta equivocada.
 
 ## 4. Admin cancela una suscripción y el cliente lo ve reflejado
 1. Login como ADMIN, cancela una suscripción de un cliente.
 2. Login como ese cliente (o revisar su vista), confirmar que el estado
    cambió a CANCELADA y no puede seguir usando ese plan.
 
-**Estado:** no verificado end-to-end explícitamente, solo a nivel de API/unit tests.
+**Estado:** ✅ verificado end-to-end en producción (Railway) — T5, 2026-08-07.
+- 2026-08-06: bloqueado (password del admin daba 401).
+- 2026-08-07: password del admin reseteada vía SQL (BCrypt cost 12, valor
+  censurado en `collab/estado/ACTUAL.md`) → login admin OK.
+- Admin cancela la suscripción de `journey.t5.20260806@test.local` (id=9):
+  la lista pasa a CANCELADA (evidencia `22-`…`24-` en
+  `collab/evidencia/qa-visual/2026-08-06-journeys-3-4/`).
+- El cliente ve "No tienes un plan activo" en el dashboard y el check-in
+  es rechazado con toast "No tenés un plan activo para registrar tu
+  entrada" (400) (evidencia `25-`…`27-`).
+- Hallazgo en la auditoría del flujo de borrado (2026-08-07): el proxy
+  del frontend crasheaba al reenviar respuestas 204 → el botón Eliminar
+  mostraba "No se pudo eliminar" aunque el borrado SÍ ocurría en BD.
+  Corregido (fix + test de regresión en `route.ts`); pendiente deploy.
+- Usuarios de prueba borrados de prod: `triage.journey34.20260806@test.local`
+  (id 7) y `triage.j3j4.20260806@test.local` (id 8), junto con sus
+  suscripciones. Queda `journey.t5.20260806@test.local` (id 9, suscripción
+  CANCELADA) para re-verificar el botón con el fix deployado y luego limpiar.
 
 ---
 
 ## Próximos pasos
 - [x] Agregar smoke test de Playwright para el Journey 1 (registro → dashboard). (15 jul 2026)
 - [x] Re-verificar Journey 1 contra producción (Railway). (15 jul 2026, passed)
-- [ ] Re-verificar Journey 3 en producción (Railway) tras el deploy del 14 jul 2026.
-- [ ] Decidir si Journey 2 necesita endpoint de cambio de rol o se deja solo admin-por-SQL.
+- [x] Re-verificar Journey 3 en producción (Railway) tras el deploy del 14 jul 2026. (06 ago 2026, T5, passed)
+- [x] Decidir si Journey 2 necesita endpoint de cambio de rol o se deja solo admin-por-SQL. (resuelto: existe PATCH /api/usuarios/{id}/rol desde 2026-08-03)
+- [x] Re-ejecutar Journey 4 en producción. (06 ago 2026: bloqueado por password; 07 ago 2026: ✅ verificado end-to-end tras reset de password + fix del proxy)
+- [ ] Ejecutar `scripts/limpiar_usuarios_prueba.sql` para borrar los usuarios de prueba acumulados (incluyendo `journey.t5.20260806@test.local` id=9; ids 7 y 8 ya borrados vía DELETE 07/08).
