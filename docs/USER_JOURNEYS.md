@@ -75,11 +75,17 @@ de T5 usaba la ruta equivocada.
 - Hallazgo en la auditoría del flujo de borrado (2026-08-07): el proxy
   del frontend crasheaba al reenviar respuestas 204 → el botón Eliminar
   mostraba "No se pudo eliminar" aunque el borrado SÍ ocurría en BD.
-  Corregido (fix + test de regresión en `route.ts`); pendiente deploy.
-- Usuarios de prueba borrados de prod: `triage.journey34.20260806@test.local`
-  (id 7) y `triage.j3j4.20260806@test.local` (id 8), junto con sus
-  suscripciones. Queda `journey.t5.20260806@test.local` (id 9, suscripción
-  CANCELADA) para re-verificar el botón con el fix deployado y luego limpiar.
+  Corregido (fix + test de regresión en `route.ts`, commit `f1ea3a4`);
+  push hecho 07/08, deploy a Railway pendiente de confirmar.
+- Re-verificación post-fix (2026-08-07): frontend local contra backend de
+  prod — el botón Eliminar mostró toast "Usuario eliminado." y el proxy
+  devolvió 204 (evidencia `31-reverificacion-eliminar-usuario-204-toast-ok.png`).
+- Usuarios de prueba BORRADOS de prod: `triage.journey34.20260806@test.local`
+  (id 7), `triage.j3j4.20260806@test.local` (id 8) y
+  `journey.t5.20260806@test.local` (id 9, suscripción CANCELADA) — los tres
+  con sus suscripciones en cascada. Quedan en prod: admin + 2 smoketests
+  (ids 3 y 5) pendientes de la limpieza final para el entregable "app
+  vacía" (decisión en `collab/estado/ACTUAL.md`).
 
 ---
 
@@ -89,4 +95,5 @@ de T5 usaba la ruta equivocada.
 - [x] Re-verificar Journey 3 en producción (Railway) tras el deploy del 14 jul 2026. (06 ago 2026, T5, passed)
 - [x] Decidir si Journey 2 necesita endpoint de cambio de rol o se deja solo admin-por-SQL. (resuelto: existe PATCH /api/usuarios/{id}/rol desde 2026-08-03)
 - [x] Re-ejecutar Journey 4 en producción. (06 ago 2026: bloqueado por password; 07 ago 2026: ✅ verificado end-to-end tras reset de password + fix del proxy)
-- [ ] Ejecutar `scripts/limpiar_usuarios_prueba.sql` para borrar los usuarios de prueba acumulados (incluyendo `journey.t5.20260806@test.local` id=9; ids 7 y 8 ya borrados vía DELETE 07/08).
+- [x] Borrar usuarios de prueba de prod. (07 ago 2026: ids 7, 8 y 9 borrados con sus suscripciones en cascada — id 9 vía botón Eliminar durante la re-verificación del fix 204)
+- [ ] Limpieza final de prod para el entregable "app vacía": borrar los 2 smoketests restantes (ids 3 y 5) — decisión de entrega en `collab/estado/ACTUAL.md`.
