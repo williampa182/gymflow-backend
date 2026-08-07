@@ -59,7 +59,7 @@ tests de regresión. Los tres hallazgos más interesantes (de diseño, no CVEs):
 | 4.1 | BCrypt con cost factor implícito | Baja | ✅ Corregido | `BCRYPT_STRENGTH = 12` explícito (07-11) |
 | 4.2 | Log injection vía X-Request-ID | Baja | ✅ Corregido | `CorrelationIdFilter` sanitiza (07-11) |
 | 4.3 | Dependabot mergeado sin revisar changelog | Baja | ✅ Proceso | Regla de revisar changelog antes de mergear (vigente) |
-| 4.4 | Workflows con acceso a PROD_DATABASE_URL | Baja | 🟡 Checklist | Verificar triggers antes de hacer el repo público |
+| 4.4 | Workflows con acceso a PROD_DATABASE_URL | Baja | ✅ Verificado | Checklist ejecutado 08-07: sin `pull_request_target`; backup.yml solo cron/manual; sin secrets alcanzables desde PRs |
 | 4.5 | Credenciales de dev hardcodeadas en compose | Baja | ✅ Documentado | Advertencia "DEV ONLY" explícita en `docker-compose.yml` (07-11) |
 | 4.6 | Contenedor backend como root | Baja | ✅ Corregido | `Dockerfile` con usuario `gymflow` no-root (07-13) |
 | §2/3/5/7/9/11 | Hallazgos menores del Security Deep Dive | Mixta | ✅ 6/6 corregidos | `af0d0f6` (07-15) + `f81f1b8` (07-21) |

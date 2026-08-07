@@ -524,9 +524,12 @@ mejoras opcionales.
    `@types/react-dom 19.2.4`, `@vitejs/plugin-react 6.0.5`. Verificado: lint
    limpio, 111/111 tests, build OK, `npm audit` 0 vulnerabilidades.
 
-5. **Checklist pre-repo-público** — revisar triggers de los workflows y qué
-   secrets ve cada uno (`THREAT_MODEL.md` §4.4), y verificar el estado de
-   commits colgantes tras el force-push del 07-07.
+5. **Checklist pre-repo-público** — **CERRADO (2026-08-07)**: triggers y secrets de
+   workflows revisados (`THREAT_MODEL.md` §4.4: sin `pull_request_target`,
+   ningún secret alcanzable desde PRs; backup.yml solo cron/manual) y commits
+   colgantes verificados con `git fsck` en los 3 repos: solo WIP/stash/deps
+   duplicados, sin secretos (blobs colgantes del backend: solo URLs locales
+   de dev). Historia alcanzable: solo placeholders `dev-only-*` intencionales.
 
 6. **Rotar credenciales filtradas en un chat de sesión** — API key de Gemini
    y un token `gho_` de GitHub expuestos en conversación (no en el repo). No

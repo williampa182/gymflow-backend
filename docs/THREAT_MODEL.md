@@ -172,7 +172,11 @@ La sección 8 (`ARCHITECTURE.md`) del proyecto ya documenta el porqué de varias
 
 ### 4.4 GitHub Actions — workflows con acceso a `PROD_DATABASE_URL`
 - **Severidad:** Baja mientras el repo sea privado; sube a Media/Alta si el repo se hace público
-- **Estado:** Checklist pendiente previo a hacer el repo público: revisar triggers de cada workflow (`pull_request` vs `pull_request_target`) y qué secrets tiene disponibles cada uno.
+- **Estado:** **CHECKLIST EJECUTADO (2026-08-07)** — verificado contra `.github/workflows/` de backend y frontend:
+  - `backend-ci.yml` y `frontend-ci.yml`: triggers `push` + `pull_request` (NUNCA `pull_request_target`), `permissions: contents: read`, **sin secrets**. En repo público, un fork PR correría sin secrets y con token read-only.
+  - `backup.yml`: triggers `schedule` (cron 07:00 UTC) + `workflow_dispatch` — imposible de disparar desde un PR; `contents: read`; único workflow con secret (`PROD_DATABASE_URL`), solo alcanzable por cron/manual.
+  - `dependabot.yml`: solo abre PRs revisables, nunca auto-mergea.
+  - **Conclusión: sin vectores de secrets hacia código no confiable; sin cambios requeridos.**
 
 ### 4.5 Credenciales de Docker Compose hardcodeadas en el repo
 - **Severidad:** Baja (son credenciales de dev sin valor real)
