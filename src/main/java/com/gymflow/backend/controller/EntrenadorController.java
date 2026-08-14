@@ -58,7 +58,7 @@ public class EntrenadorController {
     public ResponseEntity<MiEntrenadorDTO> miEntrenador(Authentication authentication) {
         return entrenadorService.miEntrenador(authentication.getName())
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
     @GetMapping("/mi-historial")

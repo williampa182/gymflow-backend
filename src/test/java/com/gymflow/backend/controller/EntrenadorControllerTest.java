@@ -42,13 +42,13 @@ class EntrenadorControllerTest {
     }
 
     @Test
-    void miEntrenador_sinAcompañante_devuelve404() {
+    void miEntrenador_sinAcompañante_devuelve204() {
         when(authentication.getName()).thenReturn("beto@gymflow.test");
         when(entrenadorService.miEntrenador("beto@gymflow.test")).thenReturn(Optional.empty());
 
         ResponseEntity<MiEntrenadorDTO> respuesta = entrenadorController.miEntrenador(authentication);
 
-        assertThat(respuesta.getStatusCode().value()).isEqualTo(404);
+        assertThat(respuesta.getStatusCode().value()).isEqualTo(204);
         verify(entrenadorService).miEntrenador("beto@gymflow.test");
         verifyNoMoreInteractions(entrenadorService);
     }
