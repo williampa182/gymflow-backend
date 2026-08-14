@@ -29,7 +29,7 @@ class GlobalExceptionHandlerTest {
     @Test
     void sinPlanActivo_mapeaA400() {
         ResponseEntity<Map<String, Object>> respuesta = handler.handleGenericRuntime(
-                new RuntimeException("No tenés un plan activo para registrar tu entrada"));
+                new RuntimeException("No tienes un plan activo para registrar tu entrada"));
         assertThat(respuesta.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 }

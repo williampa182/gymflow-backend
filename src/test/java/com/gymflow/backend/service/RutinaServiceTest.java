@@ -118,7 +118,7 @@ class RutinaServiceTest {
 
         assertThatThrownBy(() -> rutinaService.asignar("ana@gymflow.test", 10L, 2L))
                 .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("solo podés asignar rutinas activas");
+                .hasMessageContaining("solo puedes asignar rutinas activas");
 
         verify(asignacionRutinaRepository, never()).save(any());
     }
@@ -131,7 +131,7 @@ class RutinaServiceTest {
 
         assertThatThrownBy(() -> rutinaService.asignar("ana@gymflow.test", 10L, 2L))
                 .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("solo podés asignar rutinas a tus clientes acompañados");
+                .hasMessageContaining("solo puedes asignar rutinas a tus clientes acompañados");
 
         verify(asignacionRutinaRepository, never()).save(any());
     }

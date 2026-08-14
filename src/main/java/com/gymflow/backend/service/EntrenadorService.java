@@ -82,7 +82,7 @@ public class EntrenadorService {
     public void asignarme(String emailEntrenador, Long clienteId) {
         Usuario entrenador = usuarioRepository.findByEmail(emailEntrenador).orElseThrow();
         if (clienteId.equals(entrenador.getId())) {
-            throw new IllegalArgumentException("no podés ser tu propio acompañante");
+            throw new IllegalArgumentException("no puedes ser tu propio acompañante");
         }
         Usuario cliente = usuarioRepository.findById(clienteId)
                 .orElseThrow(() -> new IllegalArgumentException("cliente no encontrado"));

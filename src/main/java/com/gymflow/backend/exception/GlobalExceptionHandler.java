@@ -159,25 +159,25 @@ public class GlobalExceptionHandler {
         // Fase 4: ownership de rutinas/asignaciones. El recurso existe pero
         // no le pertenece a quien lo toca → 403, no 500 ni 404 (no revelar
         // existencia no alcanza: el mensaje ya identifica la acción).
-        if (m.contains("solo podés") || m.contains("solo el entrenador")) return HttpStatus.FORBIDDEN;
+        if (m.contains("solo puedes") || m.contains("solo el entrenador")) return HttpStatus.FORBIDDEN;
         // Fase 4: reglas de elegibilidad del acompañamiento (plan sin
         // entrenador personal, auto-asignación, usuario no cliente).
-        if (m.contains("no podés ser tu propio") || m.contains("no incluye") || m.contains("no es un cliente")) return HttpStatus.BAD_REQUEST;
+        if (m.contains("no puedes ser tu propio") || m.contains("no incluye") || m.contains("no es un cliente")) return HttpStatus.BAD_REQUEST;
         // Fase 5: check-in del cliente (POST /api/asistencias/mi). Duplicado
         // del día → 409 (mismo criterio que el duplicado de suscripción
         // activa), usuario dado de baja → 403, sin plan activo → 400.
-        // Substrings disjuntos a propósito: el 400 ("No tenés un plan activo
+        // Substrings disjuntos a propósito: el 400 ("No tienes un plan activo
         // para registrar tu entrada") contiene "tu entrada", que NO se usa
         // como matcher para no colisionar con el 409.
         if (m.contains("registraste tu entrada")) return HttpStatus.CONFLICT;
         if (m.contains("dado de baja")) return HttpStatus.FORBIDDEN;
-        if (m.contains("no tenés un plan activo")) return HttpStatus.BAD_REQUEST;
+        if (m.contains("no tienes un plan activo")) return HttpStatus.BAD_REQUEST;
         // Fase 5, P5: duplicado del día marcado por el ADMIN/kiosco → 409.
         // Mensaje distinto del SELF ("registraste") a propósito: el que ya
         // marcó es el CLIENTE. Substrings disjuntos.
         if (m.contains("ya registró")) return HttpStatus.CONFLICT;
         // Fase 5, P5: desmarcar SOLO la de hoy (regla 6). Redacción elegida
-        // para NO colisionar con el match 403 de "solo podés" (la spec lo
+        // para NO colisionar con el match 403 de "solo puedes" (la spec lo
         // exige explícitamente).
         if (m.contains("desmarcar")) return HttpStatus.BAD_REQUEST;
         // Fase 5, P4: código de carnet inválido en el kiosco → 400 genérico

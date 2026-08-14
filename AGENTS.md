@@ -93,6 +93,8 @@ Spring Boot 3.5.16 (PR #10) — si ves código o docs de referencia viejos,
 ojo con el breaking change de Spring Security 7 en el constructor de
 `DaoAuthenticationProvider`.
 
+Copy: seguir `docs/glosario-copy.md`.
+
 ## Cosas que NO tocar sin coordinar primero
 
 Revisá `collab/propuestas/` (activas) y `collab/estado/ACTUAL.md` (pendientes)

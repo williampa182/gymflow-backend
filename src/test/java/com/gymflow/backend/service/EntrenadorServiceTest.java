@@ -109,7 +109,7 @@ class EntrenadorServiceTest {
 
         assertThatThrownBy(() -> entrenadorService.asignarme("ana@gymflow.test", 1L))
                 .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("no podés ser tu propio acompañante");
+                .hasMessageContaining("no puedes ser tu propio acompañante");
 
         verify(asignacionEntrenadorRepository, never()).save(any());
     }

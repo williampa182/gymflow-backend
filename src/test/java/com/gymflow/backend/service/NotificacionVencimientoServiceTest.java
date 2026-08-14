@@ -81,8 +81,8 @@ class NotificacionVencimientoServiceTest {
                 .id(id)
                 .usuario(usuario)
                 .plan(plan)
-                .fechaInicio(LocalDate.now())
-                .fechaFin(LocalDate.now().plusDays(3))
+                .fechaInicio(LocalDate.now(RELOJ_BOGOTA))
+                .fechaFin(LocalDate.now(RELOJ_BOGOTA).plusDays(3))
                 .estado(EstadoSuscripcion.ACTIVA)
                 .build();
     }
@@ -106,8 +106,8 @@ class NotificacionVencimientoServiceTest {
         ArgumentCaptor<LocalDate> hasta = ArgumentCaptor.forClass(LocalDate.class);
         verify(suscripcionRepository).findPendientesAvisoVencimiento(
                 eq(EstadoSuscripcion.ACTIVA), desde.capture(), hasta.capture());
-        assertThat(desde.getValue()).isEqualTo(LocalDate.now());
-        assertThat(hasta.getValue()).isEqualTo(LocalDate.now().plusDays(7));
+        assertThat(desde.getValue()).isEqualTo(LocalDate.now(RELOJ_BOGOTA));
+        assertThat(hasta.getValue()).isEqualTo(LocalDate.now(RELOJ_BOGOTA).plusDays(7));
         verify(suscripcionRepository).save(suscripcion);
     }
 

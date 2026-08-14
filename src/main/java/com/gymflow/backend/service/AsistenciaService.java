@@ -73,7 +73,7 @@ public class AsistenciaService {
                 .filter(s -> s.getPlan() != null && s.getPlan().isActivo())
                 .orElse(null);
         if (activa == null) {
-            throw new RuntimeException("No tenés un plan activo para registrar tu entrada");
+            throw new RuntimeException("No tienes un plan activo para registrar tu entrada");
         }
 
         if (asistenciaRepository.existsByUsuarioIdAndFecha(usuario.getId(), hoy)) {
@@ -139,7 +139,7 @@ public class AsistenciaService {
                 .filter(s -> s.getPlan() != null && s.getPlan().isActivo())
                 .orElse(null);
         if (activa == null) {
-            throw new RuntimeException("No tenés un plan activo para registrar tu entrada");
+            throw new RuntimeException("No tienes un plan activo para registrar tu entrada");
         }
 
         if (asistenciaRepository.existsByUsuarioIdAndFecha(usuario.getId(), hoy)) {
@@ -273,7 +273,7 @@ public class AsistenciaService {
                 .filter(s -> s.getPlan() != null && s.getPlan().isActivo())
                 .orElse(null);
         if (activa == null) {
-            throw new RuntimeException("No tenés un plan activo para registrar tu entrada");
+            throw new RuntimeException("No tienes un plan activo para registrar tu entrada");
         }
 
         if (asistenciaRepository.existsByUsuarioIdAndFecha(usuario.getId(), hoy)) {
@@ -297,7 +297,7 @@ public class AsistenciaService {
     /**
      * Desmarcar (Fase 5, endpoint #6): SOLO la de hoy (regla 6). Otro día →
      * 400 (redacción elegida para NO colisionar con el match 403 de "solo
-     * podés"); inexistente → 404. La asistencia de un día pasado es histórica
+     * puedes"); inexistente → 404. La asistencia de un día pasado es histórica
      * (regla 5: hecho consumado), no se puede borrar.
      */
     @SuppressWarnings("null")

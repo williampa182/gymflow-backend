@@ -91,12 +91,12 @@ public class RutinaService {
     public void asignar(String emailEntrenador, Long rutinaId, Long clienteId) {
         Rutina rutina = obtenerPropia(emailEntrenador, rutinaId);
         if (!rutina.isActivo()) {
-            throw new IllegalArgumentException("solo podés asignar rutinas activas");
+            throw new IllegalArgumentException("solo puedes asignar rutinas activas");
         }
         if (!asignacionEntrenadorRepository.findByClienteIdAndActivaTrue(clienteId)
                 .filter(asignacion -> asignacion.getEntrenador().getId().equals(rutina.getEntrenador().getId()))
                 .isPresent()) {
-            throw new IllegalArgumentException("solo podés asignar rutinas a tus clientes acompañados");
+            throw new IllegalArgumentException("solo puedes asignar rutinas a tus clientes acompañados");
         }
         if (asignacionRutinaRepository.existsByClienteIdAndRutinaId(clienteId, rutinaId)) {
             throw new IllegalArgumentException("el cliente ya tiene esta rutina asignada");

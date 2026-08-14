@@ -150,7 +150,7 @@ class AsistenciaServiceTest {
 
         assertThatThrownBy(() -> servicio.marcarMi(EMAIL))
                 .isInstanceOf(RuntimeException.class)
-                .hasMessage("No tenés un plan activo para registrar tu entrada");
+                .hasMessage("No tienes un plan activo para registrar tu entrada");
         verify(asistenciaRepository, never()).existsByUsuarioIdAndFecha(any(), any());
     }
 
@@ -160,7 +160,7 @@ class AsistenciaServiceTest {
 
         assertThatThrownBy(() -> servicio.marcarMi(EMAIL))
                 .isInstanceOf(RuntimeException.class)
-                .hasMessage("No tenés un plan activo para registrar tu entrada");
+                .hasMessage("No tienes un plan activo para registrar tu entrada");
     }
 
     @Test
@@ -169,7 +169,7 @@ class AsistenciaServiceTest {
 
         assertThatThrownBy(() -> servicio.marcarMi(EMAIL))
                 .isInstanceOf(RuntimeException.class)
-                .hasMessage("No tenés un plan activo para registrar tu entrada");
+                .hasMessage("No tienes un plan activo para registrar tu entrada");
     }
 
     @Test
@@ -334,7 +334,7 @@ class AsistenciaServiceTest {
 
         assertThatThrownBy(() -> servicio.marcarKiosk(CODIGO_CARNET, KEY_KIOSCO))
                 .isInstanceOf(RuntimeException.class)
-                .hasMessage("No tenés un plan activo para registrar tu entrada");
+                .hasMessage("No tienes un plan activo para registrar tu entrada");
         verify(asistenciaRepository, never()).existsByUsuarioIdAndFecha(any(), any());
     }
 
@@ -465,7 +465,7 @@ class AsistenciaServiceTest {
 
         assertThatThrownBy(() -> servicio.adminMarcar(1L))
                 .isInstanceOf(RuntimeException.class)
-                .hasMessage("No tenés un plan activo para registrar tu entrada");
+                .hasMessage("No tienes un plan activo para registrar tu entrada");
     }
 
     @Test
