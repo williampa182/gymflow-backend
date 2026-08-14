@@ -123,13 +123,18 @@ management:
         enabled: true
       # Grupo de health SOLO para Redis (anti cold start del hosting free,
       # ver collab/historial/aplicado/2026-08-14-redeploy-render.md): el
-      # ping de GitHub Actions golpea /actuator/health/redis — mantiene viva
-      # la instancia free de Redis Cloud (se borra a los 14 días sin
-      # comandos) y despierta Render, SIN tocar Postgres (evita quemar la
-      # cuota de CU-horas de Neon, que suspende el compute si queda activo).
+      # ping de GitHub Actions golpea /actuator/health/redis-keepalive —
+      # mantiene viva la instancia free de Redis Cloud (se borra a los 14
+      # días sin comandos) y despierta Render, SIN tocar Postgres (evita
+      # quemar la cuota de CU-horas de Neon, que suspende el compute si
+      # queda activo).
+      # OJO (fix 2026-08-14 22:37): el grupo NO puede llamarse "redis" —
+      # choca con el contribuidor HealthIndicator de Redis que ya se
+      # registra con ese nombre (deploy de Render falló con
+      # "HealthContributor with name redis clashes with group").
       # No incluir db/disk/otros en este grupo.
       group:
-        redis:
+        redis-keepalive:
           include: redis
   metrics:
     tags:
