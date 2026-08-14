@@ -38,3 +38,6 @@ build/
 ### env files (nunca commitear secretos reales) ###
 .env*
 !.env.example
+
+### logs de runtime local (no aportan valor en historial) ###
+*.log
