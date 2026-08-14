@@ -5,8 +5,10 @@ name: Backup de PostgreSQL (producción)
 # probarlo sin esperar al cron.
 #
 # ⚠️ REQUISITO antes de que esto funcione: crear el secret de repo
-# PROD_DATABASE_URL con la connection string PÚBLICA de Postgres en Railway
-# (Settings → Variables → DATABASE_PUBLIC_URL en el servicio de Postgres).
+# PROD_DATABASE_URL con la connection string DIRECTA de Postgres en Neon
+# (con ?sslmode=require). OJO: tras el re-deploy 2026-08-14 el secret
+# quedó apuntando al Postgres de Railway (caído, plan expirado) — los
+# backups estuvieron caídos hasta actualizarlo (ver docs/BACKUP_RUNBOOK.md).
 # Sin ese secret configurado, este workflow falla en el paso de pg_dump —
 # eso es intencional (falla ruidosa en vez de "backup vacío" silencioso).
 on:
@@ -25,7 +27,8 @@ jobs:
     steps:
       - name: Instalar cliente de PostgreSQL 18 (pg_dump)
         # Debe coincidir con la versión mayor del Postgres REAL de
-        # producción en Railway (18, confirmado por el error "server version
+        # producción (Neon, 18.4 desde el re-deploy 2026-08-14; antes
+        # Railway 18, confirmado por el error "server version
         # mismatch" del 2026-07-26 al usar client 16). docker-compose.yml
         # local y CI usan postgres:18 desde 2026-08-04 — dev/CI/prod
         # alineados a la misma versión mayor; pg_dump exige que el cliente

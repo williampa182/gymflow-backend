@@ -12,9 +12,9 @@ Proyecto de portafolio construido con un flujo de colaboración
 multi-agente (ver `AGENTS.md`), documentado en detalle para servir también
 como referencia de proceso, no solo de código.
 
-**Demo en vivo:** [gymflow-backend-production-0a1b.up.railway.app](https://gymflow-backend-production-0a1b.up.railway.app)
+**Demo en vivo:** [gymflow-backend-e3h6.onrender.com](https://gymflow-backend-e3h6.onrender.com)
 · **Frontend:** [gymflow-frontend](https://github.com/williampa182/gymflow-frontend) ·
-[demo](https://gymflow-frontend-production.up.railway.app)
+[demo](https://gymflow-frontend-ten.vercel.app)
 
 ## Stack
 
@@ -23,7 +23,7 @@ como referencia de proceso, no solo de código.
 - **PostgreSQL** (Spring Data JPA)
 - **Redis** (caché)
 - **Docker Compose** para el entorno local
-- **GitHub Actions** para CI/CD, despliegue en **Railway**
+- **GitHub Actions** para CI/CD; despliegue en **Vercel + Render** (hosting gratuito, 2026-08-14: Neon para Postgres, Redis Cloud para Redis)
 
 ## Decisiones técnicas
 

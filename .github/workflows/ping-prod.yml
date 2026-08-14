@@ -1,0 +1,42 @@
+name: Ping prod (anti cold start)
+
+# Mitigación del cold start del hosting free (ver
+# collab/historial/aplicado/2026-08-14-redeploy-render.md): Render free
+# duerme tras ~15 min sin tráfico y Redis Cloud free se BORRA a los 14 días
+# sin comandos (y el login es fail-closed si Redis no está).
+#
+# Se usa el grupo /actuator/health/redis (agregado a application.yaml el
+# 2026-08-14) y NO el health completo: el health completo consulta Postgres
+# cada 10 min → el compute de Neon nunca suspende → quema las 100 CU-h/mes
+# del plan free (~180 CU-h/mes) y la BD queda suspendida ~2 semanas. El
+# health de Redis no toca Postgres: mantiene viva Redis Cloud, despierta
+# Render (levanta el contenedor) y deja que Neon duerma (despierta en
+# segundos al primer request real).
+#
+# ⚠️ LIMITACIÓN ACEPTADA: GitHub desactiva los cron de repos públicos tras
+# ~60 días sin commits (los runs de workflows NO cuentan como actividad).
+# El ping y el backup mueren silenciosamente si no hay ningún push por 60
+# días — semivida aceptada de la demo (portafolio; ver informe de cierre
+# 2026-08-14). Alternativa futura: UptimeRobot (monitor externo sin límite).
+#
+# Sin secrets: el grupo /actuator/health/redis es público (SecurityConfig
+# permitAll). El GITHUB_TOKEN por defecto ya tiene mínimo privilegio; no se
+# necesita nada más que un runner para lanzar curl.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Ping al health de Redis (prod)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Health check del grupo redis
+        run: |
+          code=$(curl -sS -o /tmp/health.json -w "%{http_code}" \
+            --max-time 30 \
+            https://gymflow-backend-e3h6.onrender.com/actuator/health/redis)
+          echo "HTTP $code"
+          cat /tmp/health.json
+          test "$code" = "200"

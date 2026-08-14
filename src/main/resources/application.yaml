@@ -14,7 +14,9 @@ spring:
     name: gymflow-backend
 
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:gymflow_db}
+    # DB_OPTIONS permite parámetros JDBC extra sin romper el default local
+    # (ej. Neon exige TLS: DB_OPTIONS="?sslmode=require" — 2026-08-14).
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:gymflow_db}${DB_OPTIONS:}
     username: ${DB_USER:gymflow_user}
     password: ${DB_PASSWORD:gymflow_pass}
     driver-class-name: org.postgresql.Driver
@@ -119,6 +121,16 @@ management:
       show-details: ${HEALTH_SHOW_DETAILS:when-authorized}
       probes:
         enabled: true
+      # Grupo de health SOLO para Redis (anti cold start del hosting free,
+      # ver collab/historial/aplicado/2026-08-14-redeploy-render.md): el
+      # ping de GitHub Actions golpea /actuator/health/redis — mantiene viva
+      # la instancia free de Redis Cloud (se borra a los 14 días sin
+      # comandos) y despierta Render, SIN tocar Postgres (evita quemar la
+      # cuota de CU-horas de Neon, que suspende el compute si queda activo).
+      # No incluir db/disk/otros en este grupo.
+      group:
+        redis:
+          include: redis
   metrics:
     tags:
       application: ${spring.application.name}

@@ -180,11 +180,11 @@ Ver `collab/historial/aplicado/2026-08-01-revision-seguridad-features.md`.
 
 ---
 
-## Pendientes que siguen abiertos (a 2026-08-01)
+## Pendientes que siguen abiertos (a 2026-08-01, ACTUALIZADO 2026-08-14)
 
-1. **Confirmar en runtime de producción (Railway) que `requirepass` de
-   Redis (1.1) está efectivamente activo ahí.** En dev está confirmado
-   (`docker-compose.yml`: `requirepass` + bind a `127.0.0.1`). No
-   verificado en prod por falta de acceso a la consola — requiere acceso
-   de William a Railway, no trabajo de código.
+1. **Redis `requirepass` en prod — CERRADO (2026-08-04/14).** En dev está
+   confirmado (`docker-compose.yml`: `requirepass` + bind a `127.0.0.1`);
+   en prod: Redis Cloud free con `REDIS_PASSWORD` + `REDIS_USERNAME`
+   seteado en Render y verificado operativo (login 200 real, 2026-08-14).
 2. **M2 — CSP con nonce** (ver arriba) — mejora opcional de portafolio.
+   Sigue abierta (no bloquea; el resto de headers está verificado).

@@ -20,9 +20,10 @@ que el componente aislado funcione.
 5. Ve su dashboard de cliente (no el de admin).
 
 **Estado:** ✅ implementado y verificado con smoke test automatizado, tanto
-local como contra producción (Railway) — `e2e/registro.spec.ts` en
-`gymflow-frontend`, Playwright, 15 jul 2026
-(`BASE_URL=https://gymflow-frontend-production.up.railway.app npm run test:e2e`).
+local como contra producción — `e2e/registro.spec.ts` en
+`gymflow-frontend`, Playwright, 15 jul 2026 (verificado de nuevo contra el
+re-deploy 2026-08-14: 5/5 e2e verdes, ver `collab/historial/aplicado/2026-08-14-redeploy-render.md`)
+(`BASE_URL=https://gymflow-frontend-ten.vercel.app npm run test:e2e`).
 
 ## 2. Admin gestiona usuarios
 1. Login como ADMIN.
@@ -43,8 +44,9 @@ ya existe `PATCH /api/usuarios/{id}/rol` implementado y funcional.
 4. Ve su suscripción activa reflejada en su panel.
 5. (Admin) ve esa suscripción reflejada en `/dashboard/admin/estadisticas`.
 
-**Estado:** ✅ verificado en producción (Railway) — T5, 2026-08-06.
-Playwright headless contra `https://gymflow-frontend-production.up.railway.app`.
+**Estado:** ✅ verificado en producción — T5, 2026-08-06 (era Railway; el
+re-deploy 2026-08-14 no cambia este journey).
+Playwright headless contra `https://gymflow-frontend-ten.vercel.app`.
 Usuario de prueba: `journey.t5.20260806@test.local` (id=9, rol CLIENTE).
 Evidencia en `collab/evidencia/qa-visual/2026-08-06-journeys-3-4/`:
   - `01-s0-register-page.png` … `03-s0-registered-dashboard.png`: registro OK
@@ -96,4 +98,4 @@ de T5 usaba la ruta equivocada.
 - [x] Decidir si Journey 2 necesita endpoint de cambio de rol o se deja solo admin-por-SQL. (resuelto: existe PATCH /api/usuarios/{id}/rol desde 2026-08-03)
 - [x] Re-ejecutar Journey 4 en producción. (06 ago 2026: bloqueado por password; 07 ago 2026: ✅ verificado end-to-end tras reset de password + fix del proxy)
 - [x] Borrar usuarios de prueba de prod. (07 ago 2026: ids 7, 8 y 9 borrados con sus suscripciones en cascada — id 9 vía botón Eliminar durante la re-verificación del fix 204)
-- [ ] Limpieza final de prod para el entregable "app vacía": borrar los 2 smoketests restantes (ids 3 y 5) — decisión de entrega en `collab/estado/ACTUAL.md`.
+- [x] Limpieza final de prod para el entregable: borrar los smoketests restantes. (14 ago 2026: tras el re-deploy a Neon, ids 2-5 borrados — prod queda solo con william ADMIN; la data demo de Railway se restauró en el mismo día: 4 planes + admin)

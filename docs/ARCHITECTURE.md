@@ -1,8 +1,9 @@
 # GymFlow — Arquitectura técnica completa
 
-> Documento vivo. Última actualización: 2026-08-06 (cierre §7: M2 CSP nonce,
-> eliminar `DiagnosticHeaderController`/fix 2.2, Postgres 18 alineado, T2
-> usuarios de prueba — ver §7). Pensado para que cualquier sesión futura (con Claude, otra IA,
+> Documento vivo. Última actualización: 2026-08-14 (alineación con código
+> vigente tras auditoría total: Fases 4/5 en §2, cookie session httpOnly en
+> §3.3, Postgres 18 en §2.1/§4, Gemini rotada y journeys 3-4 cerrados en §7,
+> prod re-deployado a hosting gratuito tras expiración de Railway — ver §1). Pensado para que cualquier sesión futura (con Claude, otra IA,
 > u otro desarrollador) tenga el contexto técnico completo de una sola
 > lectura, sin depender de memoria de conversación. Para el estado de
 > seguridad vigente, el source of truth es [`THREAT_MODEL.md`](THREAT_MODEL.md)
@@ -13,8 +14,22 @@
 GymFlow es un sistema de gestión de gimnasios (planes, suscripciones,
 usuarios con roles) construido como proyecto de portafolio. Stack: Spring
 Boot (backend) + Next.js (frontend) + PostgreSQL + Redis, con CI/CD en
-GitHub Actions y **ambos servicios desplegados en Railway** (demostraciones
-en vivo en el README de cada repo).
+GitHub Actions. **Estado del hosting (2026-08-14): prod OPERATIVO en hosting
+gratuito — Vercel (frontend) + Render (backend) + Neon (Postgres, TLS) +
+Redis Cloud** (re-deploy tras la expiración de Railway; ver §6 "Deploy a
+hosting gratuito" y `collab/historial/aplicado/2026-08-14-redeploy-render.md`):
+
+| Componente | URL / datos |
+|---|---|
+| Frontend (Vercel) | `https://gymflow-frontend-ten.vercel.app` |
+| Backend (Render, free, oregon) | `https://gymflow-backend-e3h6.onrender.com` |
+| Postgres (Neon, AWS us-east-2, PG 18.4) | `ep-dark-night-ay80lxgq.c-5.us-east-2.aws.neon.tech:5432/neondb` (TLS vía `DB_OPTIONS=?sslmode=require`) |
+| Redis (Redis Cloud) | `mountain-table-crowd-83258.db.redis.io:18333` |
+
+Limitación aceptada: Render free duerme tras ~15 min sin tráfico y Neon
+pausa su compute → el 1er request tras inactividad tarda ~1 min (demo
+"caliente" carga al instante). Mitigación opcional: ping cron (GH Action)
+cada 10 min al health check.
 
 **Repos** (ambos privados):
 - `github.com/williampa182/gymflow-backend`
@@ -35,7 +50,7 @@ en vivo en el README de cada repo).
 | Spring Boot | 4.1.0 (migrado desde 3.5.16, sesión 2026-07-26) |
 | Java | 21 (Temurin) |
 | Maven | vía wrapper `mvnw` |
-| PostgreSQL | 16 en dev (Docker: `postgres:16`); **18 en Railway prod** (divergencia documentada, ver §7) |
+| PostgreSQL | 18 en dev y prod (Docker: `postgres:18`, alineado 2026-08-04) |
 | Redis | 7-alpine (`requirepass` + bind a `127.0.0.1` en dev) |
 | JJWT | 0.13.0 |
 | springdoc-openapi | 3.0.3 (requiere Boot 4.x) |
@@ -48,20 +63,23 @@ client/           ChatCompletionClient (interfaz), GeminiChatCompletionClient,
                   EmailClient, ResendEmailClient, EmailEnvioException, EmailPayload
 config/           SecurityConfig, SwaggerConfig
 controller/       AuthController, PlanController, SuscripcionController, UsuarioController,
-                  DashboardAdminController, ChatController
+                  DashboardAdminController, ChatController, RutinaController,
+                  EntrenadorController, AsistenciaController, KioscoConfigController
+                  (Fases 4-5, agregados 2026-08-02/03)
 dto/              request/, response/, dashboard/, PlanRequestDTO, PlanResponseDTO, etc.
 exception/        GlobalExceptionHandler (@RestControllerAdvice)
 model/            Usuario, Plan, Suscripcion + enums/ (Rol, TipoPlan, EstadoSuscripcion)
 observability/    CorrelationIdFilter
 repository/       UsuarioRepository, PlanRepository, SuscripcionRepository (Spring Data JPA) + projection/
 security/
-  filter/         LoginRateLimitFilter, ChatRateLimitFilter
+  filter/         LoginRateLimitFilter, ChatRateLimitFilter, KioskRateLimitFilter
   jwt/            JwtAuthFilter, JwtUtil
   auth/           TimingSafeAuthenticationProvider
   service/        UserDetailsServiceImpl
 service/          AuthService, PlanService, SuscripcionService, UsuarioService,
                   DashboardAdminService, ChatService, NotificacionVencimientoService,
-                  NotificacionVencimientoScheduler, PlantillaEmailVencimiento
+                  NotificacionVencimientoScheduler, PlantillaEmailVencimiento,
+                  RutinaService, EntrenadorService, AsistenciaService, KioscoConfigService
 validation/       NotCommonPassword, NotCommonPasswordValidator
 ```
 
@@ -108,6 +126,27 @@ validation/       NotCommonPassword, NotCommonPasswordValidator
 
 **`/api/chat`** (`ChatController`, agregado 2026-07-26) — **cualquier usuario autenticado**:
 - `POST /api/chat` — chatbot de soporte con RAG simple sobre los planes + guía del dashboard (ver §2.10). Rate limited con `ChatRateLimitFilter` (Redis), kill-switch `app.chat.enabled` → 503.
+
+**`/api/rutinas`** (`RutinaController`, Fase 4, agregado 2026-08-02) — ENTRENADOR y ADMIN:
+- `GET /api/rutinas?page=&size=`, `POST /api/rutinas`, `PUT /api/rutinas/{id}`, `DELETE /api/rutinas/{id}` — gestión de rutinas
+- `GET /api/rutinas/mias` — rutinas asignadas al cliente autenticado
+- `POST /api/rutinas/asignar/{clienteId}` / `DELETE /api/rutinas/{id}/asignacion/{clienteId}` — asignar/quitar rutina a un cliente
+
+**`/api/entrenador`** (`EntrenadorController`, Fase 4) — ENTRENADOR/ADMIN (propias) o CLIENTE (vistas):
+- `GET /api/entrenador/clientes-elegibles` — clientes sin entrenador asignado
+- `POST /api/entrenador/asignarme/{clienteId}` — acompañar un cliente
+- `GET /api/entrenador/mio` / `GET /api/entrenador/mi-historial` — entrenador asignado / historial del cliente
+- `GET /api/entrenador/{asignacionId}` — detalle de la asignación
+
+**`/api/asistencias`** (`AsistenciaController`, Fase 5, agregado 2026-08-03) — CLIENTE (propias) / ADMIN:
+- `GET /api/asistencias/mi`, `GET /api/asistencias/mi/semana`, `GET /api/asistencias/mi/carnet` — vistas del cliente
+- `GET /api/asistencias/acompanados/semana` — acompañados por el entrenador
+- `POST /api/asistencias/kiosk` — check-in con `X-Kiosk-Key` (público con credencial de dispositivo)
+- `POST /api/asistencias` + `GET /api/asistencias/admin/historial?page=&size=` — check-in manual e historial (ADMIN)
+- `GET /api/usuarios/{id}/carnet` + `POST /api/usuarios/{id}/carnet/rotar` — carnet digital (ADMIN)
+
+**`/api/kiosco/config`** (`KioscoConfigController`, Fase 5) — ADMIN:
+- `GET /api/kiosco/config` + `POST /api/kiosco/config/rotar` — ver/rotar `KIOSK_API_KEY` (fail-closed: sin key, el kiosco degrada a cuenta ADMIN).
 
 **`/api/v1/debug`** — **ELIMINADO 2026-08-06** (`DiagnosticHeaderController`, temporal del fix 2.2, agregado 2026-07-24): la verificación de X-Forwarded-For/RemoteIpValve vive ahora como test de comportamiento end-to-end (`RemoteIpValveIntegrationTest`, observa los buckets de rate limit por IP resuelta) y la matriz de escenarios quedó documentada en la propuesta del fix 2.2.
 
@@ -290,8 +329,9 @@ app/
   page.tsx                    Landing (incluye "Decisiones técnicas" + video del dashboard)
   login/, register/           Páginas de auth (AuthShell compartido)
   dashboard/
-    layout.tsx + page.tsx     + planes/, suscripciones/, usuarios/
-    _components/              AdminDashboardCharts (Recharts), ChatWidget
+    layout.tsx + page.tsx     + planes/, rutinas/, suscripciones/, usuarios/
+    _components/              AdminDashboardCharts (Recharts), ChatWidget,
+                               AsistenciasSemanaCard, MiCarnet
   api/
     auth/login/route.ts       Route Handler: recibe credenciales, llama al
                                backend, setea cookies httpOnly (token) y
@@ -303,13 +343,15 @@ app/
                                backend real, adjuntando el JWT como
                                Authorization: Bearer + valida Origin en
                                métodos de mutación
-components/                   AuthShell, ButtonSpinner, EmptyState, PageHeader,
-                               Select (custom, a11y), Skeleton, ToastHost
+components/                   AuthShell, ButtonSpinner, ConfirmDialog, EmptyState,
+                               PageHeader, Select (custom, a11y), Skeleton, ToastHost
 lib/
   api.ts                      Cliente axios hacia /api/backend/* (timeout 15s, 30s en /chat)
   auth.ts                     Helpers de sesión
   chatStorage.ts              Persistencia del chat en sessionStorage
+  chunkError.ts               Manejo de errores de chunk (retry/reload, T9)
   format.ts                   formatFecha (es-CO) / formatMoneda (COP)
+  manejo-sesion.ts            Distinción 401/403 (sesión vs permisos) + redirección
   toast.tsx                   Sistema de toasts custom (cero dependencias)
   ui.ts                       Tokens de UI del sistema "sala de máquinas"
   useFocusTrap.ts, usePageTitle.ts, useRequireRole.ts
@@ -338,11 +380,12 @@ cookie legible):
    navegador) llama al backend real (`BACKEND_URL/api/auth/login`), recibe
    `{ token, id, nombre, email, rol }`.
 3. Setea DOS cookies en la respuesta:
-   - `token`: **httpOnly**, `secure` en producción, `sameSite: lax`, 24h —
-     el JWT real, invisible para JS.
-   - `session`: **no httpOnly**, mismos datos MENOS el token (`id`, `nombre`,
-     `email`, `rol`) — para que la UI muestre el nombre/rol sin decodificar
-     el JWT.
+- `token`: **httpOnly**, `secure` en producción, `sameSite: lax`, 24h —
+      el JWT real, invisible para JS.
+   - `session`: **httpOnly** también (desde fix security-deep-dive §1, julio
+      2026), mismos datos MENOS el token (`id`, `nombre`, `email`, `rol`) —
+      solo la lee el servidor (proxy y route handlers), nunca el JS del
+      navegador.
 4. Cuando el cliente necesita pegarle al backend (ej. listar planes), llama
    a una ruta LOCAL tipo `/api/backend/planes` — nunca directo al backend.
 5. `app/api/backend/[...path]/route.ts` (corre server-side) lee la cookie
@@ -361,14 +404,14 @@ el patrón correcto para SPAs con JWT.
 
 **Variables de entorno clave**: `BACKEND_URL` (server-side, default
 `http://localhost:8080`) y `NEXT_PUBLIC_APP_ORIGIN` (origen esperado para la
-validación de Origin) — ambas seteadas en Railway.
+validación de Origin) — ambas seteadas en Vercel (Production).
 
 ---
 
 ## 4. Infraestructura local (desarrollo)
 
 `docker-compose.yml` (en `gymflow-backend/`):
-- `postgres:16` → puerto 5432, credenciales `gymflow_user`/`gymflow_pass`/`gymflow_db` (comentario "DEV ONLY" explícito, hallazgo 4.5)
+- `postgres:18` → puerto 5432, credenciales `gymflow_user`/`gymflow_pass`/`gymflow_db` (comentario "DEV ONLY" explícito, hallazgo 4.5)
 - `redis:7-alpine` → `127.0.0.1:6379:6379` con `requirepass` (`REDIS_PASSWORD`, default dev `gymflow_redis_dev_only_change_me`) — fix del hallazgo 1.1
 
 **Orden de arranque obligatorio**: `docker-compose up -d` SIEMPRE antes de
@@ -380,9 +423,8 @@ Postgres/Redis estén arriba, falla el arranque.
 2026-07-30) — para sobrescribir defaults de dev, copiar `.env.example` a
 `.env`. El frontend también usa su `.env`.
 
-**Nota de versiones divergentes**: dev corre Postgres 16, Railway prod corre
-18 — el backup de CI usa el cliente 18 (ver §2.8). Pendiente alinear el
-`docker-compose.yml` a 18 (ver §7).
+**Nota de versiones**: dev, CI y prod corren todos Postgres 18 (alineado
+2026-08-04; el backup de CI usa el cliente 18, ver §2.8).
 
 **Usuarios de prueba** (sembrados en dev):
 - `william@gymflow.com` / `admin1234` (ADMIN, id 1)
@@ -405,31 +447,32 @@ Postgres/Redis estén arriba, falla el arranque.
 | `JWT_EXPIRATION` | 86400000 (24h) | |
 | `JWT_INCLUDE_TOKEN_IN_RESPONSE` | `true` | Opción C del fix deep-dive §4; `false` cuando se use cookie httpOnly exclusivamente |
 | `REVEAL_EMAIL_EXISTS` | `false` | `true` solo si el contexto justifica priorizar UX sobre el threat model (decisión 07-16) |
-| `ALLOWED_ORIGINS` | `http://localhost:3000` | En Railway: URL(s) real(es) del frontend separadas por coma |
+| `ALLOWED_ORIGINS` | `http://localhost:3000` | En Render: `https://gymflow-frontend-ten.vercel.app` (frontend Vercel, 2026-08-14) |
 | `SWAGGER_ENABLED` | `false` | `true` solo en dev/staging para la UI de Swagger (gateado, fix §2) |
 | `APP_CHAT_ENABLED` | `true` | Kill-switch del chatbot; `false` → 503 |
 | `APP_CHAT_PROVIDER` | `gemini` | `gemini` \| `anthropic` — cambiar solo esta property |
-| `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` | placeholder dev-only | En prod: API key real del proveedor activo |
-| `RESEND_API_KEY` | placeholder dev-only | En prod: key real de Resend |
+| `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` | placeholder dev-only | En prod: API key real del proveedor activo (Gemini rotada 2026-08-13) |
+| `RESEND_API_KEY` | placeholder dev-only | En prod: key real de Resend (aún NO configurada en Render; `EMAIL_AVISO_ENABLED=false`) |
 | `EMAIL_FROM`, `EMAIL_AVISO_VENTANA_DIAS`, `EMAIL_CTA_BASE_URL`, `EMAIL_AVISO_ENABLED`, `EMAIL_AVISO_CRON` | `no-reply@gymflow.com` / 7 / `http://localhost:3000` / `true` / `0 0 9 * * *` | Notificaciones de vencimiento (ver §2.11). `EMAIL_CTA_BASE_URL` debe coincidir con `NEXT_PUBLIC_APP_ORIGIN` |
 | `MAX_HTTP_REQUEST_HEADER_SIZE`, `MAX_HTTP_FORM_POST_SIZE`, `MAX_SWALLOW_SIZE` | 8KB / 2MB / 2MB | Límites del hallazgo 3.4 |
 | `ERROR_INCLUDE_STACKTRACE` / `_MESSAGE` / `_BINDING_ERRORS` | `never` | Sin stack traces ni mensajes internos en errores (hallazgo 3.6) |
-| `SECURITY_LOG_LEVEL` | TRACE | Bajar a WARN en prod |
-| `SPRING_PROFILES_ACTIVE` | (ninguno → `default`) | **`prod` en Railway** para logs JSON (logstash-logback-encoder) |
+| `SECURITY_LOG_LEVEL` | TRACE | Bajar a WARN en prod (en Render: `WARN` ✓) |
+| `SPRING_PROFILES_ACTIVE` | (ninguno → `default`) | **`prod` en Railway** para logs JSON (logstash-logback-encoder). En Render (2026-08-14): NO seteado → logs en texto plano (pendiente menor) |
+| `DB_OPTIONS` | (vacío) | Parámetros JDBC extra — en Neon: `?sslmode=require` (agregado 2026-08-14, `application.yaml:17`) |
 | `HEALTH_SHOW_DETAILS` | `when-authorized` | |
 
 ### Frontend
 
 | Variable | Notas |
 |---|---|
-| `BACKEND_URL` | URL del backend, server-side only (route handlers + proxy) |
-| `NEXT_PUBLIC_APP_ORIGIN` | Origen esperado para validar `Origin` en el proxy (defensa CSRF, THREAT_MODEL §2.5). En Railway: URL pública del frontend |
+| `BACKEND_URL` | URL del backend, server-side only (route handlers + proxy). En Vercel (Production): `https://gymflow-backend-e3h6.onrender.com` |
+| `NEXT_PUBLIC_APP_ORIGIN` | Origen esperado para validar `Origin` en el proxy (defensa CSRF, THREAT_MODEL §2.5). En Vercel (Production): `https://gymflow-frontend-ten.vercel.app` |
 
 ### GitHub Actions (secrets)
 
 | Secret | Usado en | Estado |
 |---|---|---|
-| `PROD_DATABASE_URL` | `.github/workflows/backup.yml` | **Configurado y en producción** — backups diarios corriendo desde 2026-07-26 (usar `DATABASE_PUBLIC_URL` de Railway) |
+| `PROD_DATABASE_URL` | `.github/workflows/backup.yml` | ⚠️ **APUNTABA AL POSTGRES DE RAILWAY (caído 2026-08-14)** — el secret de GitHub debe apuntar al connection string de Neon (con `sslmode=require`) para que el backup diario vuelva a correr. Pendiente de actualizar (ver `BACKUP_RUNBOOK.md`) |
 
 ---
 
@@ -456,7 +499,10 @@ detalle exhaustivo de cada hallazgo). Resumen de lo más relevante:
 
 **Hallazgo más grave, no anticipado**: `RegisterRequest` aceptá un campo
 `rol` del cliente sin restricción — cualquiera podía registrarse como
-`ADMIN`. Corregido: el rol se fuerza a `CLIENTE` siempre, server-side.
+`ADMIN`. Corregido: whitelist server-side `CLIENTE`/`ENTRENADOR` en
+`AuthService.resolverRolRegistro`; cualquier otro valor —incluido `ADMIN`—
+o la ausencia caen a `CLIENTE` (least privilege, fix de escalada §7.0;
+verificado `AuthService.java:109-114`).
 
 **Otros hallazgos críticos/altos confirmados y corregidos**:
 - Excepción sin manejar en `JwtAuthFilter` ante un JWT malformado (DoS
@@ -532,8 +578,8 @@ mejoras opcionales.
    de dev). Historia alcanzable: solo placeholders `dev-only-*` intencionales.
 
 6. **Rotar credenciales filtradas en un chat de sesión** — API key de Gemini
-   y un token `gho_` de GitHub expuestos en conversación (no en el repo). No
-   urgente, pero vale la pena rotarlas.
+   **ROTADA (2026-08-13, cierre T1)**; token `gho_` de GitHub **SIGUE
+   PENDIENTE** (bloqueante, ver `collab/estado/ACTUAL.md`).
 
 7. **`DiagnosticHeaderController`** (`/api/v1/debug/headers`) — temporal del
    fix 2.2 — **CERRADO 2026-08-06**: controlador, test y property
@@ -541,9 +587,11 @@ mejoras opcionales.
    reescrito como test de comportamiento (buckets de rate limit por IP
    resuelta).
 
-8. **User journeys sin verificar en producción** — viajes 3 y 4 de
-   `docs/USER_JOURNEYS.md`; decidir si hace falta el endpoint de cambio de
-   rol (hoy solo SQL directo).
+8. **User journeys sin verificar en producción** — **CERRADO (2026-08-06)**:
+   journeys 3 y 4 verificados contra prod real
+   (`collab/evidencia/qa-visual/2026-08-06-journeys-3-4/reporte.md`). El
+   endpoint de cambio de rol sigue sin existir (hoy solo SQL directo, por
+   diseño).
 
 9. **Pentesting real (OWASP ZAP)** — escaneo pasivo contra prod + activo
    contra local (con fixture); interpretación contra `THREAT_MODEL.md`.
@@ -555,8 +603,9 @@ mejoras opcionales.
    3.7, SQLi/XSS 0 alertas). Evidencia y detalle en
    `collab/evidencia/pentest-2026-08-13-zap/`.
 
-10. **Rotar credenciales filtradas en chat (T1)** — API key de Gemini y
-    token `gho_` de GitHub (ítem 6, pendiente de William).
+10. **Rotar credenciales filtradas en chat (T1)** — API key de Gemini:
+    **ROTADA y CERRADO (2026-08-13)** (`collab/estado/ACTUAL.md:104-107`);
+    token `gho_` de GitHub: **pendiente de William**.
 
 11. **`gzip` no disponible por defecto en PowerShell de Windows** — el script
     `backup-local.ps1` cae a dejar el `.sql` sin comprimir si no detecta
@@ -577,11 +626,19 @@ mejoras opcionales.
   resolvieron: Spring Security 7 (`DaoAuthenticationProvider` con
   constructor explícito), `@MockBean`→`@MockitoBean`, `TestRestTemplate`
   movido a artefacto modular (`spring-boot-resttestclient`).
-- **Deploy a Railway** — backend y frontend en producción con demos en vivo;
-  CORS vía `ALLOWED_ORIGINS`, `JWT_SECRET` real, `BACKEND_URL` +
-  `NEXT_PUBLIC_APP_ORIGIN`, `SPRING_PROFILES_ACTIVE=prod`, `DDL_AUTO=validate`
-  (supuesto operativo: verificar en consola), backup `PROD_DATABASE_URL`
-  activo.
+- **Deploy a hosting gratuito (2026-08-14) — APLICADO Y VERIFICADO**: tras
+  la expiración de Railway (prod caído, plan expirado), se re-desplegó a
+  Vercel (frontend) + Render (backend, free) + Neon (Postgres, TLS) +
+  Redis Cloud. Cambio de código: `application.yaml:17` (`DB_OPTIONS` para
+  `sslmode=require`). Checklist de seguridad: `JWT_SECRET` nuevo, primer
+  ADMIN bootstrap (william@gymflow.com, `registro-estado=false`),
+  `DDL_AUTO=validate`, `SECURITY_LOG_LEVEL=WARN`. Verificado: login/registro
+  200 vía proxy, e2e 5/5 contra prod, CORS/headers correctos. Detalle:
+  `collab/historial/aplicado/2026-08-14-redeploy-render.md`.
+  Nota: el backup ya fue reactivado y verificado contra Neon (2026-08-14,
+  secret `PROD_DATABASE_URL` actualizado; ver `BACKUP_RUNBOOK.md` §2).
+  Solo queda `SPRING_PROFILES_ACTIVE=prod` sin setear en Render (formato de
+  logs JSON, menor).
 - **Limpieza de usuarios de prueba en prod (T2)** — ejecutada 2026-08-06 con
   backup fresco (`gymflow_prod_20260806_215858.sql.gz`, drill de restore
   probado contra BD local temporal) + `scripts/limpiar_usuarios_prueba.sql`:
