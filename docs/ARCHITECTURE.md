@@ -547,6 +547,13 @@ mejoras opcionales.
 
 9. **Pentesting real (OWASP ZAP)** — escaneo pasivo contra prod + activo
    contra local (con fixture); interpretación contra `THREAT_MODEL.md`.
+   **EJECUTADO y CERRADO (2026-08-13)**: OWASP ZAP 2.17.0 (Docker) pasivo +
+   activo sobre el build prod local `:3001` y `:8080/api` con sesión ADMIN
+   real. Resultado: 0 High, 0 Medium reales, 1 Low real (`X-Powered-By:
+   Next.js`) corregido con `poweredByHeader: false` (frontend); mitigaciones
+   del THREAT_MODEL confirmadas en runtime (2.5, 2.6, 2.7, 3.1, 3.2, 3.6,
+   3.7, SQLi/XSS 0 alertas). Evidencia y detalle en
+   `collab/evidencia/pentest-2026-08-13-zap/`.
 
 10. **Rotar credenciales filtradas en chat (T1)** — API key de Gemini y
     token `gho_` de GitHub (ítem 6, pendiente de William).
