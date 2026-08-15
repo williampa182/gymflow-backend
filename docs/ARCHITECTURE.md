@@ -22,7 +22,7 @@ Redis Cloud** (re-deploy tras la expiración de Railway; ver §7 y
 | Componente | URL / datos |
 |---|---|
 | Frontend (Vercel) | `https://gymflow-frontend-ten.vercel.app` |
-| Backend (Render, free, oregon) | `https://gymflow-backend-e3h6.onrender.com` |
+| Backend (Render, free, oregon, **Auto-Deploy: No** desde 2026-08-15) | `https://gymflow-backend-e3h6.onrender.com` |
 | Postgres (Neon, AWS us-east-2, PG 18.4) | `ep-dark-night-ay80lxgq.c-5.us-east-2.aws.neon.tech:5432/neondb` (TLS vía `DB_OPTIONS=?sslmode=require`) |
 | Redis (Redis Cloud) | `mountain-table-crowd-83258.db.redis.io:18333` |
 
@@ -36,6 +36,11 @@ eliminó: GitHub retrasaba los runs 16-28 min, la app dormía entre pings y
 los runs fallaban por timeout del cold start). El health de Redis también
 mantiene viva la instancia free de Redis Cloud (se borra a los 14 días sin
 comandos) y NO toca Postgres (no quema la cuota de CU-horas de Neon).
+Nota (2026-08-15): el **Auto-Deploy de Render está en "No"** — cada push al
+repo (incluso de docs) disparaba un rebuild que dejaba el servicio en
+"no-deploy" con 502s de 5-10 min (incidente UptimeRobot 15-08 14:16 GMT-5,
+auto-resuelto). Con el desarrollo cerrado, los deploys son manuales cuando
+haya cambios reales de backend.
 
 **Repos** (ambos **públicos** desde 2026-08-15 — verificados con `gh`):
 - `github.com/williampa182/gymflow-backend`
