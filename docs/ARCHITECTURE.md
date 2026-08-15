@@ -28,8 +28,14 @@ hosting gratuito" y `collab/historial/aplicado/2026-08-14-redeploy-render.md`):
 
 Limitación aceptada: Render free duerme tras ~15 min sin tráfico y Neon
 pausa su compute → el 1er request tras inactividad tarda ~1 min (demo
-"caliente" carga al instante). Mitigación opcional: ping cron (GH Action)
-cada 10 min al health check.
+"caliente" carga al instante). Mitigación activa (2026-08-15):
+**UptimeRobot** (monitor externo gratuito, HTTP cada 5 min a
+`/actuator/health/redis-keepalive`) — cadencia garantizada, sin límite de
+60 días como tenían los crons de GitHub Actions (el ping por GH Action se
+eliminó: GitHub retrasaba los runs 16-28 min, la app dormía entre pings y
+los runs fallaban por timeout del cold start). El health de Redis también
+mantiene viva la instancia free de Redis Cloud (se borra a los 14 días sin
+comandos) y NO toca Postgres (no quema la cuota de CU-horas de Neon).
 
 **Repos** (ambos privados):
 - `github.com/williampa182/gymflow-backend`
