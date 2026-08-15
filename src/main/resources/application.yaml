@@ -112,7 +112,7 @@ management:
   endpoints:
     web:
       exposure:
-        # health e info son públicos (usados por Railway/health checks y el
+        # health e info son públicos (usados por UptimeRobot/health checks y el
         # dashboard); prometheus y el resto quedan detrás de ADMIN via
         # SecurityConfig. metrics es útil en dev, se puede restringir después.
         include: health,info,prometheus,metrics

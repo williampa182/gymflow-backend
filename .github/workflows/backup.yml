@@ -4,11 +4,11 @@ name: Backup de PostgreSQL (producción)
 # puede disparar manualmente desde la pestaña Actions ("Run workflow") para
 # probarlo sin esperar al cron.
 #
-# ⚠️ REQUISITO antes de que esto funcione: crear el secret de repo
-# PROD_DATABASE_URL con la connection string DIRECTA de Postgres en Neon
-# (con ?sslmode=require). OJO: tras el re-deploy 2026-08-14 el secret
-# quedó apuntando al Postgres de Railway (caído, plan expirado) — los
-# backups estuvieron caídos hasta actualizarlo (ver docs/BACKUP_RUNBOOK.md).
+# ✅ COMPLETADO 2026-08-14: el secret de repo PROD_DATABASE_URL ya apunta a
+# la connection string DIRECTA de Postgres en Neon (con ?sslmode=require) y
+# el backup se verificó con un run manual el mismo día (ver
+# docs/BACKUP_RUNBOOK.md §2). Nota: en repos públicos GitHub desactiva los
+# crons tras ~60 días sin actividad — reactivar desde Settings → Actions.
 # Sin ese secret configurado, este workflow falla en el paso de pg_dump —
 # eso es intencional (falla ruidosa en vez de "backup vacío" silencioso).
 on:

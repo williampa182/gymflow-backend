@@ -45,7 +45,7 @@ La sección 8 (`ARCHITECTURE.md`) del proyecto ya documenta el porqué de varias
 - **Estado:** RESUELTO y VERIFICADO EN PROD (2026-08-04) — `requirepass` + bind a `127.0.0.1` en `docker-compose.yml` (dev, 07-11); en Railway la password se inyecta vía `REDIS_PASSWORD` y se verificó con un PING autenticado contra el endpoint público del Redis de prod. No se expone a internet de forma anónima: el AUTH es obligatorio.
 - **Impacto:** Es la raíz de la que cuelgan varios otros hallazgos de este documento (1.2, 3.1, 4.2). Sin autenticación, cualquiera con acceso de red al puerto 6379 puede leer/escribir/borrar todo el contenido de Redis sin restricción.
 - **Explotación:** Si el puerto queda expuesto (mala segmentación de red en Railway, docker mal configurado), conexión directa con `redis-cli` sin credenciales.
-- **Mitigación:** `requirepass` obligatorio en dev y prod (no "para cuando se despliegue"). Confirmar que Redis en Railway solo escucha en red interna, nunca expuesto a internet.
+- **Mitigación:** `requirepass` obligatorio en dev y prod (no "para cuando se despliegue"). Confirmar que Redis (Cloud en prod desde 2026-08-14) solo escucha vía TLS con AUTH — nunca expuesto anónimo a internet.
 
 ### 1.2 Deserialización insegura vía `GenericJackson2JsonRedisSerializer` → RCE
 - **Severidad:** ~~Crítica~~ **DEGRADADA y RESUELTA — ver corrección en el audit log (2026-07-11): needs_review/hardening preventivo, RCE NO demostrado en el checkout actual**
@@ -98,7 +98,7 @@ La sección 8 (`ARCHITECTURE.md`) del proyecto ya documenta el porqué de varias
 - **Severidad:** Alta
 - **Estado:** **RESUELTO (defensa en profundidad).**
 - **Impacto:** La cookie `token` se manda automáticamente en cada request al dominio; el proxy convertía la cookie en `Authorization` header válido.
-- **Mitigación:** **Aplicada.** El proxy `[...path]/route.ts` valida `Origin` contra el origen esperado (`NEXT_PUBLIC_APP_ORIGIN`) en todo método que muta estado. Backend con CSRF deshabilitado por diseño (API stateless con JWT). Setear `NEXT_PUBLIC_APP_ORIGIN` en Railway (checklist de deploy).
+- **Mitigación:** **Aplicada.** El proxy `[...path]/route.ts` valida `Origin` contra el origen esperado (`NEXT_PUBLIC_APP_ORIGIN`) en todo método que muta estado. Backend con CSRF deshabilitado por diseño (API stateless con JWT). Setear `NEXT_PUBLIC_APP_ORIGIN` en Vercel (checklist de deploy).
 
 ### 2.6 SSRF / passthrough no sanitizado en el proxy `[...path]/route.ts`
 - **Severidad:** Alta
@@ -146,13 +146,13 @@ La sección 8 (`ARCHITECTURE.md`) del proyecto ya documenta el porqué de varias
 ### 3.6 Fingerprinting vía headers de servidor y páginas de error
 - **Severidad:** Media
 - **Estado:** **RESUELTO (2026-07-11).**
-- **Mitigación:** `include-stacktrace: never`, `server-header: ""`, whitelabel deshabilitado — explícito independientemente del perfil activo. Setear `SPRING_PROFILES_ACTIVE=prod` en Railway (checklist).
+- **Mitigación:** `include-stacktrace: never`, `server-header: ""`, whitelabel deshabilitado — explícito independientemente del perfil activo. Setear `SPRING_PROFILES_ACTIVE=prod` en Render (checklist).
 
 ### 3.7 Falta de headers de seguridad HTTP (CSP, X-Frame-Options, HSTS)
 - **Severidad:** Media
-- **Estado:** **RESUELTO (frontend, con test de regresión 07-25). Mejora pendiente opcional: CSP completa.**
+- **Estado:** **RESUELTO (frontend, con test de regresión 07-25).**
 - **Impacto:** Sin `X-Frame-Options`/CSP, el frontend era embebible en iframe ajeno (clickjacking). Sin HSTS, la primera conexión de cada usuario es vulnerable a downgrade.
-- **Mitigación:** **Aplicada** en `next.config.ts`: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, HSTS (2 años), CSP con `frame-ancestors 'none'`. **Diferido (M2, 2026-08-01):** ampliar CSP con `script-src`/`object-src`/`base-uri` vía nonce — requiere testeo real con los scripts inline de Next; candidato a mejora futura del portafolio.
+- **Mitigación:** **Aplicada** en `next.config.ts`: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, HSTS (2 años), CSP con `frame-ancestors 'none'`. **M2 — CSP con nonce: CERRADO (2026-08-04)**, aplicada en el frontend (proxy + matcher + e2e de regresión) y verificado en prod el mismo día (ver `ARCHITECTURE.md` §7.3 y `SECURITY_AUDIT_LOG.md`).
 
 ---
 

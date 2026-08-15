@@ -16,8 +16,8 @@ usuarios con roles) construido como proyecto de portafolio. Stack: Spring
 Boot (backend) + Next.js (frontend) + PostgreSQL + Redis, con CI/CD en
 GitHub Actions. **Estado del hosting (2026-08-14): prod OPERATIVO en hosting
 gratuito — Vercel (frontend) + Render (backend) + Neon (Postgres, TLS) +
-Redis Cloud** (re-deploy tras la expiración de Railway; ver §6 "Deploy a
-hosting gratuito" y `collab/historial/aplicado/2026-08-14-redeploy-render.md`):
+Redis Cloud** (re-deploy tras la expiración de Railway; ver §7 y
+`collab/historial/aplicado/2026-08-14-redeploy-render.md`):
 
 | Componente | URL / datos |
 |---|---|
@@ -37,7 +37,7 @@ los runs fallaban por timeout del cold start). El health de Redis también
 mantiene viva la instancia free de Redis Cloud (se borra a los 14 días sin
 comandos) y NO toca Postgres (no quema la cuota de CU-horas de Neon).
 
-**Repos** (ambos privados):
+**Repos** (ambos **públicos** desde 2026-08-15 — verificados con `gh`):
 - `github.com/williampa182/gymflow-backend`
 - Frontend en el mismo dueño, repo separado (`gymflow-frontend`)
 
@@ -212,7 +212,7 @@ reabrían el canal).
 
 **`CorsConfigurationSource`**: orígenes permitidos vía variable de entorno
 `ALLOWED_ORIGINS` (separados por coma; default dev `http://localhost:3000`).
-En Railway se setea con la(s) URL(s) real(es) del frontend — ya no hay nada
+En Render se setea con la(s) URL(s) real(es) del frontend (Vercel) — ya no hay nada
 hardcodeado (ver `SecurityConfig.java`).
 
 **`CorrelationIdFilter`** (`observability/`, agregado 2026-07-07): no es
@@ -240,13 +240,14 @@ configurado (ver §6.1).
 ### 2.7 Observabilidad (agregado 2026-07-07)
 
 - **Actuator + Micrometer + Prometheus**: `/actuator/health` (con grupos
-  `liveness`/`readiness`, listo para health checks de Railway),
-  `/actuator/info` (con build-info real vía plugin Maven), `/actuator/prometheus`.
+  `liveness`/`readiness`, más `redis-keepalive` — el health público que
+  consulta UptimeRobot), `/actuator/info` (con build-info real vía plugin
+  Maven), `/actuator/prometheus`.
 - **Logging**: `logback-spring.xml` con dos perfiles — `dev`/`default`
   (texto plano coloreado en consola) y `prod`/`railway` (JSON estructurado
   vía `logstash-logback-encoder`, listo para Grafana Loki). **El perfil se
   activa con la variable `SPRING_PROFILES_ACTIVE`** — sin setearla en
-  Railway, se queda en texto plano.
+  Render, se queda en texto plano.
 - Validado en local: correlationId presente en 100% de las líneas de un
   mismo request; `/actuator/prometheus` devuelve 403 sin JWT de ADMIN
   (confirmado en pruebas reales).
@@ -260,13 +261,14 @@ operativo completo):
    el `pg_dump`/`psql` que ya trae el contenedor Docker, sin instalar nada
    en Windows. Retención de los últimos 10 backups locales.
 2. **Producción**: `.github/workflows/backup.yml` — cron diario 07:00 UTC,
-   `pg_dump` (cliente 18, debe coincidir con el Postgres de Railway) contra
-   el secret `PROD_DATABASE_URL` — **configurado y corriendo desde
-   2026-07-26**, verificación de integridad, artifact de GitHub con 35 días
-   de retención.
+   `pg_dump` (cliente 18, debe coincidir con el Postgres de Neon) contra
+   el secret `PROD_DATABASE_URL` — corriendo desde 2026-07-26 (interrumpido
+   el 14/08 por la caída de Railway y **reactivado contra Neon el mismo
+   día, verificado**), verificación de integridad, artifact de GitHub con
+   35 días de retención.
 
 **Limitación conocida y aceptada**: no es Point-in-Time Recovery real (eso
-existe en Railway pero solo en plan Pro). Es snapshot diario — ventana de
+existe en Neon pero solo en planes de pago). Es snapshot diario — ventana de
 pérdida de hasta ~24h entre backups.
 
 ### 2.9 CI/CD
@@ -463,7 +465,7 @@ Postgres/Redis estén arriba, falla el arranque.
 | `MAX_HTTP_REQUEST_HEADER_SIZE`, `MAX_HTTP_FORM_POST_SIZE`, `MAX_SWALLOW_SIZE` | 8KB / 2MB / 2MB | Límites del hallazgo 3.4 |
 | `ERROR_INCLUDE_STACKTRACE` / `_MESSAGE` / `_BINDING_ERRORS` | `never` | Sin stack traces ni mensajes internos en errores (hallazgo 3.6) |
 | `SECURITY_LOG_LEVEL` | TRACE | Bajar a WARN en prod (en Render: `WARN` ✓) |
-| `SPRING_PROFILES_ACTIVE` | (ninguno → `default`) | **`prod` en Railway** para logs JSON (logstash-logback-encoder). En Render (2026-08-14): NO seteado → logs en texto plano (pendiente menor) |
+| `SPRING_PROFILES_ACTIVE` | (ninguno → `default`) | **`prod` en Render** para logs JSON (logstash-logback-encoder). En Render (2026-08-14): NO seteado → logs en texto plano (pendiente menor) |
 | `DB_OPTIONS` | (vacío) | Parámetros JDBC extra — en Neon: `?sslmode=require` (agregado 2026-08-14, `application.yaml:17`) |
 | `HEALTH_SHOW_DETAILS` | `when-authorized` | |
 
@@ -478,7 +480,7 @@ Postgres/Redis estén arriba, falla el arranque.
 
 | Secret | Usado en | Estado |
 |---|---|---|
-| `PROD_DATABASE_URL` | `.github/workflows/backup.yml` | ⚠️ **APUNTABA AL POSTGRES DE RAILWAY (caído 2026-08-14)** — el secret de GitHub debe apuntar al connection string de Neon (con `sslmode=require`) para que el backup diario vuelva a correr. Pendiente de actualizar (ver `BACKUP_RUNBOOK.md`) |
+| `PROD_DATABASE_URL` | `.github/workflows/backup.yml` | ✅ **ACTUALIZADO a Neon el 2026-08-14** (connection string directo con `sslmode=require`) — backup verificado el mismo día con run manual (ver `BACKUP_RUNBOOK.md`) |
 
 ---
 
@@ -551,7 +553,7 @@ tests, no solo que el código de producción compile.
 
 ## 7. Pendientes conocidos (con contexto de por qué)
 
-Estado al 2026-08-06. Los pendientes históricos de abajo (migración a Boot 4
+Estado al 2026-08-15. Los pendientes históricos de abajo (migración a Boot 4
 y deploy a Railway) están **cerrados**; quedan pocos ítems de verificación y
 mejoras opcionales.
 
@@ -649,8 +651,9 @@ mejoras opcionales.
   backup fresco (`gymflow_prod_20260806_215858.sql.gz`, drill de restore
   probado contra BD local temporal) + `scripts/limpiar_usuarios_prueba.sql`:
   borrados `smoketest.gymflow.20260804@example.com` y
-  `triage.checkin.20260806@test.local`. Prod queda con 3 usuarios
-  (william ADMIN + 2 smoketests reales).
+  `triage.checkin.20260806@test.local`. Prod queda con 1 usuario
+  (william ADMIN — los smoketests restantes se borraron en la limpieza
+  final del 14/08).
 - **Timeouts a clientes externos** — pendiente de la Fase 5 original:
   aplicados 2026-08-01 (fix M1, connect 3s/read 30s en Gemini/Anthropic/
   Resend). Circuit breakers hacia Postgres/Redis siguen fuera de scope para

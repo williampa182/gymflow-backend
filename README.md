@@ -21,7 +21,7 @@ como referencia de proceso, no solo de código.
 - **Java 21** + **Spring Boot 4.1.0**
 - **Spring Security 7** — autenticación JWT vía cookie httpOnly
 - **PostgreSQL** (Spring Data JPA)
-- **Redis** (caché)
+- **Redis** (rate limiting de auth; la caché se removió 2026-07-11)
 - **Docker Compose** para el entorno local
 - **GitHub Actions** para CI/CD; despliegue en **Vercel + Render** (hosting gratuito, 2026-08-14: Neon para Postgres, Redis Cloud para Redis)
 
@@ -30,9 +30,9 @@ como referencia de proceso, no solo de código.
 - **Cookie httpOnly en vez de localStorage para el JWT**: reduce la
   superficie de ataque XSS — el token no es accesible desde JavaScript en
   el cliente.
-- **Redis para caché**: los datos de planes y suscripciones se leen mucho
-  más de lo que se escriben; cachear evita ida y vuelta innecesaria a
-  Postgres en cada request.
+- **Redis para rate limiting**: `LoginRateLimitFilter` y `KioskRateLimitFilter`
+  limitan los intentos de auth por IP y por credencial (fail-closed: si
+  Redis falla, responde 503 explícito en vez de abrir el floodgate).
 - **Rehash de BCrypt on-login**: si el cost factor de hashing cambia (por
   ejemplo al subir hardware o política de seguridad), los hashes viejos se
   actualizan de forma transparente en el próximo login del usuario, sin
@@ -44,12 +44,18 @@ como referencia de proceso, no solo de código.
 
 ## Features
 
-- Autenticación con JWT en cookie httpOnly, roles (`ADMIN` / `CLIENTE`)
+- Autenticación con JWT en cookie httpOnly, roles (`ADMIN` / `ENTRENADOR` / `CLIENTE`)
 - CRUD de planes y suscripciones
 - Gestión de usuarios con control de acceso por rol
 - Dashboard administrativo
 - Chatbot de soporte con RAG simple sobre los planes del gimnasio, con
   rate limiting
+- Rutinas y acompañamiento entrenador↔cliente (asignar/quitar rutina,
+  historial de acompañamientos)
+- Asistencias/check-in: pase de asistencia diario, carnet digital con QR
+  y modo kiosco
+- Notificaciones de vencimiento de suscripciones vía Resend (opcional,
+  `EMAIL_AVISO_ENABLED`)
 - Documentación OpenAPI/Swagger (gateada por env var, deshabilitada por
   defecto)
 

@@ -85,9 +85,9 @@ de T5 usaba la ruta equivocada.
 - Usuarios de prueba BORRADOS de prod: `triage.journey34.20260806@test.local`
   (id 7), `triage.j3j4.20260806@test.local` (id 8) y
   `journey.t5.20260806@test.local` (id 9, suscripción CANCELADA) — los tres
-  con sus suscripciones en cascada. Quedan en prod: admin + 2 smoketests
-  (ids 3 y 5) pendientes de la limpieza final para el entregable "app
-  vacía" (decisión en `collab/estado/ACTUAL.md`).
+  con sus suscripciones en cascada. Prod queda con 1 usuario: **william
+  ADMIN** (los smoketests ids 3 y 5 se borraron en la limpieza final del
+  14/08, ver checklist abajo).
 
 ---
 

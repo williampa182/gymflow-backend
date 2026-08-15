@@ -3,7 +3,7 @@
 > Puerta de entrada a la documentación de seguridad del proyecto. Para el
 > detalle de amenazas y su estado actual: [`THREAT_MODEL.md`](THREAT_MODEL.md).
 > Para la bitácora completa de auditorías y fixes: [`SECURITY_AUDIT_LOG.md`](SECURITY_AUDIT_LOG.md).
-> Última actualización: 2026-08-01.
+> Última actualización: 2026-08-15.
 
 ## Resumen ejecutivo
 
@@ -12,7 +12,7 @@
 | Hallazgos confirmados en auditorías (2026-07-09 → 2026-08-01) | 34 |
 | Corregidos / cerrados (incluidos reclasificados y documentados) | 34 |
 | Pendientes de código | 0 |
-| Pendientes de verificación en producción | 0 (Redis `requirepass` en Railway verificado 2026-08-04: AUTH ok) |
+| Pendientes de verificación en producción | 0 (Redis `requirepass` en Redis Cloud/Render verificado 2026-08-14: login real 200) |
 | `npm audit` (frontend) | 0 vulnerabilidades (verificado 2026-08-01) |
 | CVE-2026-40976 (Spring Boot 4.x + Actuator) | No aplica (Boot 4.1.0, fuera de rango + `SecurityConfig` propio) |
 
@@ -71,6 +71,8 @@ tests de regresión. Los tres hallazgos más interesantes (de diseño, no CVEs):
 | C2 | Chat: ingeniería de prompt contra el bot (revelar instrucciones/stack, inventar datos) | Media | ✅ Corregido | 3 reglas explícitas en el system prompt (08-01) |
 | C3 | Chat: sin kill-switch para prod | Baja | ✅ Corregido | `app.chat.enabled` / `APP_CHAT_ENABLED` → 503 (08-01) |
 | C4 | Cuota del tier gratis sin observabilidad | Baja | ✅ Corregido | Log de uso sin contenido (proveedor/modelo/tokens/duración) en ambos clientes (08-01) |
+| ZAP | Pentesting real OWASP ZAP 2.17 (pasivo+activo, sesión ADMIN) | — | ✅ Cerrado (13-08) | **0 High, 0 Medium reales**, 1 Low (X-Powered-By) corregido con `poweredByHeader: false` |
+| DEPLOY | Re-deploy gratuito tras Railway (Vercel+Render+Neon+Redis Cloud) | — | ✅ Operativo (14-08) | `JWT_SECRET` rotado, password admin regenerada, `DDL_AUTO=validate`, health/redis-keepalive para UptimeRobot |
 
 ## ¿Quién hizo qué?
 

@@ -53,8 +53,8 @@ public class SecurityConfig {
     private final PasswordEncoder passwordEncoder;
 
     // Origenes permitidos para CORS. En local por defecto solo localhost:3000;
-    // en Railway se define ALLOWED_ORIGINS con la(s) URL(s) real(es) del
-    // frontend, separadas por coma (ej: https://gymflow-frontend.up.railway.app).
+    // en Render se define ALLOWED_ORIGINS con la(s) URL(s) real(es) del
+    // frontend, separadas por coma (ej: https://gymflow-frontend-ten.vercel.app).
     @Value("${ALLOWED_ORIGINS:http://localhost:3000}")
     private String allowedOrigins;
 

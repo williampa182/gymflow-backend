@@ -29,11 +29,14 @@ Workflow de GitHub Actions: `.github/workflows/backup.yml`
 - Hace `pg_dump` completo, comprimido, con verificación de integridad (el workflow falla ruidosamente si el dump está corrupto, vacío, o sospechosamente pequeño — nunca falla en silencio)
 - Guarda el resultado como **artifact de GitHub Actions**, con 35 días de retención
 
-### Setup requerido (una sola vez — RE-EJECUTAR tras el re-deploy 2026-08-14)
+### Setup aplicado y verificado (2026-08-14)
 
-⚠️ **El Postgres de Railway quedó caído el 2026-08-14** (plan expirado) y el
-secret `PROD_DATABASE_URL` de GitHub seguía apuntando ahí → **los backups
-están caídos desde esa fecha** hasta que se actualice el secret. Pasos:
+✅ **COMPLETADO**: tras la caída de Railway (2026-08-14), el secret
+`PROD_DATABASE_URL` de GitHub se actualizó al connection string directo de
+Neon y el backup fue **verificado con un run manual el mismo día** (run
+`31844449997`, artifact `gymflow_prod_20260814_215507.sql.gz`, 2858 bytes,
+contenido inspeccionado con `william@gymflow.com` presente). Pasos de
+referencia por si hay que re-ejecutar el setup:
 
 1. En Neon: **Dashboard → Connection Details** → copiar el connection
    string **directo** (no el pooled) de la base `neondb`. Debe incluir
@@ -45,14 +48,19 @@ están caídos desde esa fecha** hasta que se actualice el secret. Pasos:
    secret** (o New si no existe).
    - Nombre: `PROD_DATABASE_URL`
    - Valor: la connection string del paso 1 (con el password real).
-3. Probar de inmediato con un run manual (**Actions** → `Backup de
-   PostgreSQL (producción)` → **Run workflow**) y confirmar que el artifact
-   se genera y pasa la verificación.
+3. Probar con un run manual (**Actions** → `Backup de PostgreSQL
+   (producción)` → **Run workflow**) y confirmar que el artifact se genera
+   y pasa la verificación.
 
-Sin este secret configurado (o apuntando a Railway muerto), el workflow
+Sin este secret configurado (o apuntando a un host muerto), el workflow
 falla intencionalmente en el primer paso, con un mensaje claro (`Falta el
 secret PROD_DATABASE_URL`) en vez de generar un backup vacío sin que nadie
 se entere.
+
+⚠️ **Vencimiento del cron (repos públicos)**: GitHub desactiva los
+workflows programados tras ~60 días sin actividad en repos públicos. Si el
+cron deja de correr, reactivar desde **Settings → Actions** o usar
+`workflow_dispatch` manual.
 
 ### Restaurar un backup de producción
 
@@ -69,5 +77,5 @@ se entere.
 ### Limitaciones conocidas (honestas, para no generar falsa sensación de seguridad)
 
 - **No es Point-in-Time Recovery.** Es un snapshot diario — si algo se rompe a las 3 PM y el último backup es de las 07:00 AM, se pierden esas horas. Neon ofrece branching/time-travel, pero el restore point-in-time con retención larga es de pago. Si algún día se paga Neon (o se migra al Plan A de Oracle con Postgres propio), activar PITR real ahí es la mejora más directa sobre esta estrategia.
-- **Retención de 35 días** por el límite gratuito de artifacts de GitHub Actions. Backups más viejos que eso se pierden a menos que se descarguen manualmente antes. Nota: los backups históricos de Railway (previos al 14/08) siguen en los artifacts; los de Neon empiezan a existir cuando se actualice el secret.
-- **No probado con restauración automática end-to-end** (solo se valida integridad del `.gz` y que el contenido tenga forma de dump válido) — la restauración real se probó manualmente en local, no está automatizada como test de CI. Se puede sumar más adelante si se quiere un nivel "enterprise" de confianza.
+- **Retención de 35 días** por el límite gratuito de artifacts de GitHub Actions. Backups más viejos que eso se pierden a menos que se descarguen manualmente antes. Nota: los backups históricos de Railway (previos al 14/08) siguen en los artifacts; los de Neon existen desde el 14/08 (el dump Railway 13/08 también está archivado en `C:\respaldo\gymflow-artifacts\`).
+- **Restauración probada en real, no automatizada como test de CI**: drill de restore local (06/08) + **restauración real contra Neon prod el 14/08** (drop schema + dump Railway 13/08, exit 0, verificado por API: 4 planes + admin). Falta solo el test de CI si algún día se quiere un nivel "enterprise" de confianza.

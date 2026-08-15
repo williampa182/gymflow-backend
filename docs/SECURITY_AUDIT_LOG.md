@@ -4,7 +4,7 @@
 > corrigió y cuándo. Este archivo NO es el threat model (eso es
 > [`THREAT_MODEL.md`](THREAT_MODEL.md)) — es la evidencia detrás de la
 > tabla de estados del [`SECURITY_CHANGELOG.md`](SECURITY_CHANGELOG.md).
-> Última actualización: 2026-08-01.
+> Última actualización: 2026-08-15.
 
 ---
 
@@ -186,5 +186,5 @@ Ver `collab/historial/aplicado/2026-08-01-revision-seguridad-features.md`.
    confirmado (`docker-compose.yml`: `requirepass` + bind a `127.0.0.1`);
    en prod: Redis Cloud free con `REDIS_PASSWORD` + `REDIS_USERNAME`
    seteado en Render y verificado operativo (login 200 real, 2026-08-14).
-2. **M2 — CSP con nonce** (ver arriba) — mejora opcional de portafolio.
-   Sigue abierta (no bloquea; el resto de headers está verificado).
+2. **M2 — CSP con nonce** (ver arriba) — **CERRADO (2026-08-04)**: aplicada
+   y verificada en prod el mismo día (e2e 3/3 contra Railway).
