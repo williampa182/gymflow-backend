@@ -78,7 +78,7 @@ class UsuarioServiceTest {
         Pageable pageable = PageRequest.of(0, 20);
         when(usuarioRepository.findAll(pageable)).thenReturn(new PageImpl<>(List.of(usuario)));
 
-        Page<UsuarioResponseDTO> resultado = usuarioService.listarUsuarios(null, pageable);
+        Page<UsuarioResponseDTO> resultado = usuarioService.listarUsuarios(null, null, pageable);
 
         assertThat(resultado.getContent()).hasSize(1);
         assertThat(resultado.getContent().get(0).getNombre()).isEqualTo("William Admin");
@@ -89,10 +89,35 @@ class UsuarioServiceTest {
         Pageable pageable = PageRequest.of(0, 20);
         when(usuarioRepository.findByRol(Rol.ADMIN, pageable)).thenReturn(new PageImpl<>(List.of(usuario)));
 
-        Page<UsuarioResponseDTO> resultado = usuarioService.listarUsuarios(Rol.ADMIN, pageable);
+        Page<UsuarioResponseDTO> resultado = usuarioService.listarUsuarios(Rol.ADMIN, null, pageable);
 
         assertThat(resultado.getContent()).hasSize(1);
         assertThat(resultado.getContent().get(0).getRol()).isEqualTo(Rol.ADMIN);
+    }
+
+    @Test
+    void listar_conTextoBuscaEnVezDeListar() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(usuarioRepository.buscarPorTexto(eq(Rol.CLIENTE), eq("rosa"), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(usuario)));
+
+        Page<UsuarioResponseDTO> resultado =
+                usuarioService.listarUsuarios(Rol.CLIENTE, "  rosa  ", pageable);
+
+        assertThat(resultado.getContent()).hasSize(1);
+        verify(usuarioRepository, never()).findByRol(any(), any(Pageable.class));
+        verify(usuarioRepository, never()).findAll(any(Pageable.class));
+    }
+
+    @Test
+    void listar_escapaComodinesLike() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(usuarioRepository.buscarPorTexto(isNull(), eq("50\\%\\_"), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        usuarioService.listarUsuarios(null, "50%_", pageable);
+
+        verify(usuarioRepository).buscarPorTexto(isNull(), eq("50\\%\\_"), eq(pageable));
     }
 
     @Test

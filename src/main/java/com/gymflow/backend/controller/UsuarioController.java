@@ -25,8 +25,9 @@ public class UsuarioController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Page<UsuarioResponseDTO>> listar(
             @RequestParam(required = false) Rol rol,
+            @RequestParam(required = false) String q,
             @PageableDefault(size = 20, sort = "id") Pageable pageable) {
-        return ResponseEntity.ok(usuarioService.listarUsuarios(rol, pageable));
+        return ResponseEntity.ok(usuarioService.listarUsuarios(rol, q, pageable));
     }
 
     @PatchMapping("/{id}/rol")

@@ -33,12 +33,31 @@ public class UsuarioService {
     private final AsignacionEntrenadorRepository asignacionEntrenadorRepository;
     private final SuscripcionRepository suscripcionRepository;
 
-    public Page<UsuarioResponseDTO> listarUsuarios(Rol rol, Pageable pageable) {
-        Page<Usuario> usuarios = (rol != null)
-                ? usuarioRepository.findByRol(rol, pageable)
-                : usuarioRepository.findAll(pageable);
+    public Page<UsuarioResponseDTO> listarUsuarios(Rol rol, String textoBusqueda, Pageable pageable) {
+        // D1-B: con texto se busca (paginado); sin texto, comportamiento
+        // anterior intacto para el resto de consumidores.
+        String q = textoBusqueda == null ? "" : textoBusqueda.trim();
+        Page<Usuario> usuarios;
+        if (q.isEmpty()) {
+            usuarios = (rol != null)
+                    ? usuarioRepository.findByRol(rol, pageable)
+                    : usuarioRepository.findAll(pageable);
+        } else {
+            if (q.length() > 50) {
+                q = q.substring(0, 50);
+            }
+            usuarios = usuarioRepository.buscarPorTexto(rol, escaparLike(q), pageable);
+        }
 
         return usuarios.map(this::toDTO);
+    }
+
+    /**
+     * D1-B: \% y \_ se buscarían como comodines sin esto ("50%" traería
+     * "500", "_" traería todo). Se escapan para búsqueda literal.
+     */
+    static String escaparLike(String texto) {
+        return texto.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
     @SuppressWarnings("null")
