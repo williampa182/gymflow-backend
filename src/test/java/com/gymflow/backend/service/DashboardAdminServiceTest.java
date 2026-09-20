@@ -10,7 +10,6 @@ import com.gymflow.backend.repository.SuscripcionRepository;
 import com.gymflow.backend.repository.UsuarioRepository;
 import com.gymflow.backend.repository.projection.AsistenciaPorFechaProjection;
 import com.gymflow.backend.repository.projection.IngresoPorTipoPlanProjection;
-import com.gymflow.backend.repository.projection.SuscripcionPorEstadoProjection;
 import com.gymflow.backend.repository.projection.UsuarioPorRolProjection;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -54,16 +53,21 @@ class DashboardAdminServiceTest {
 
     @Test
     void obtenerEstadisticas_completaCategoriasFaltantesConCero() {
+        when(clock.instant()).thenReturn(INSTANTE);
+        when(clock.getZone()).thenReturn(BOGOTA);
         when(usuarioRepository.contarUsuariosActivosPorRol()).thenReturn(List.of(
                 usuarioPorRol(Rol.ADMIN, 2),
                 usuarioPorRol(Rol.CLIENTE, 10)
         ));
-        when(suscripcionRepository.ingresosEstimadosPorTipoPlan(EstadoSuscripcion.ACTIVA))
+        // D1-A: ingresos y conteos llevan el hoy Bogotá.
+        when(suscripcionRepository.ingresosEstimadosPorTipoPlan(EstadoSuscripcion.ACTIVA, HOY))
                 .thenReturn(List.of(ingresoPorTipoPlan(TipoPlan.MENSUAL, "50000.00", 3)));
-        when(suscripcionRepository.contarSuscripcionesPorEstado()).thenReturn(List.of(
-                suscripcionPorEstado(EstadoSuscripcion.ACTIVA, 3),
-                suscripcionPorEstado(EstadoSuscripcion.CANCELADA, 1)
-        ));
+        when(suscripcionRepository.countByEstadoAndFechaFinGreaterThanEqual(
+                EstadoSuscripcion.ACTIVA, HOY)).thenReturn(3L);
+        when(suscripcionRepository.countByEstado(EstadoSuscripcion.VENCIDA)).thenReturn(0L);
+        when(suscripcionRepository.countByEstadoAndFechaFinLessThan(
+                EstadoSuscripcion.ACTIVA, HOY)).thenReturn(0L);
+        when(suscripcionRepository.countByEstado(EstadoSuscripcion.CANCELADA)).thenReturn(1L);
 
         DashboardAdminStatsResponse resultado = dashboardAdminService.obtenerEstadisticas();
 
@@ -172,19 +176,4 @@ class DashboardAdminServiceTest {
         };
     }
 
-    private SuscripcionPorEstadoProjection suscripcionPorEstado(
-            EstadoSuscripcion estado,
-            long cantidad) {
-        return new SuscripcionPorEstadoProjection() {
-            @Override
-            public EstadoSuscripcion getEstado() {
-                return estado;
-            }
-
-            @Override
-            public long getCantidad() {
-                return cantidad;
-            }
-        };
-    }
 }

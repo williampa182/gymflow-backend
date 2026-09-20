@@ -14,7 +14,6 @@ import com.gymflow.backend.repository.SuscripcionRepository;
 import com.gymflow.backend.repository.UsuarioRepository;
 import com.gymflow.backend.repository.projection.AsistenciaPorFechaProjection;
 import com.gymflow.backend.repository.projection.IngresoPorTipoPlanProjection;
-import com.gymflow.backend.repository.projection.SuscripcionPorEstadoProjection;
 import com.gymflow.backend.repository.projection.UsuarioPorRolProjection;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -84,8 +83,12 @@ public class DashboardAdminService {
     }
 
     private List<IngresoPorTipoPlanStat> ingresosPorTipoPlan() {
+        // D1-A: solo suscripciones VIGENTES (fechaFin >= hoy Bogotá). Una
+        // ACTIVA con fecha pasada ya no suma (etiqueta UI: "Ingresos vigentes
+        // estimados").
+        LocalDate hoy = LocalDate.now(clock);
         Map<TipoPlan, IngresoPorTipoPlanProjection> ingresos = new EnumMap<>(TipoPlan.class);
-        suscripcionRepository.ingresosEstimadosPorTipoPlan(EstadoSuscripcion.ACTIVA)
+        suscripcionRepository.ingresosEstimadosPorTipoPlan(EstadoSuscripcion.ACTIVA, hoy)
                 .forEach(row -> ingresos.put(row.getTipoPlan(), row));
 
         return List.of(TipoPlan.MENSUAL, TipoPlan.TRIMESTRAL, TipoPlan.SEMESTRAL, TipoPlan.ANUAL)
@@ -102,13 +105,19 @@ public class DashboardAdminService {
     }
 
     private List<SuscripcionPorEstadoStat> suscripcionesPorEstado() {
-        Map<EstadoSuscripcion, Long> conteos = new EnumMap<>(EstadoSuscripcion.class);
-        suscripcionRepository.contarSuscripcionesPorEstado()
-                .forEach(row -> conteos.put(row.getEstado(), row.getCantidad()));
+        // D1-A: conteos derivados por fecha, no por estado almacenado.
+        // VENCIDA = guardadas + ACTIVA con fecha pasada.
+        LocalDate hoy = LocalDate.now(clock);
+        long activas = suscripcionRepository.countByEstadoAndFechaFinGreaterThanEqual(
+                EstadoSuscripcion.ACTIVA, hoy);
+        long vencidas = suscripcionRepository.countByEstado(EstadoSuscripcion.VENCIDA)
+                + suscripcionRepository.countByEstadoAndFechaFinLessThan(
+                        EstadoSuscripcion.ACTIVA, hoy);
+        long canceladas = suscripcionRepository.countByEstado(EstadoSuscripcion.CANCELADA);
 
-        return List.of(EstadoSuscripcion.ACTIVA, EstadoSuscripcion.VENCIDA, EstadoSuscripcion.CANCELADA)
-                .stream()
-                .map(estado -> new SuscripcionPorEstadoStat(estado, conteos.getOrDefault(estado, 0L)))
-                .toList();
+        return List.of(
+                new SuscripcionPorEstadoStat(EstadoSuscripcion.ACTIVA, activas),
+                new SuscripcionPorEstadoStat(EstadoSuscripcion.VENCIDA, vencidas),
+                new SuscripcionPorEstadoStat(EstadoSuscripcion.CANCELADA, canceladas));
     }
 }

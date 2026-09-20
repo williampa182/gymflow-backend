@@ -69,7 +69,7 @@ public class AsistenciaService {
         LocalDate hoy = LocalDate.now(clock);
         Suscripcion activa = suscripcionRepository
                 .findByUsuarioIdAndEstado(usuario.getId(), EstadoSuscripcion.ACTIVA)
-                .filter(s -> !s.getFechaFin().isBefore(hoy))
+                .filter(s -> VigenciaSuscripcion.vigente(s, hoy))
                 .filter(s -> s.getPlan() != null && s.getPlan().isActivo())
                 .orElse(null);
         if (activa == null) {
@@ -135,7 +135,7 @@ public class AsistenciaService {
         LocalDate hoy = LocalDate.now(clock);
         Suscripcion activa = suscripcionRepository
                 .findByUsuarioIdAndEstado(usuario.getId(), EstadoSuscripcion.ACTIVA)
-                .filter(s -> !s.getFechaFin().isBefore(hoy))
+                .filter(s -> VigenciaSuscripcion.vigente(s, hoy))
                 .filter(s -> s.getPlan() != null && s.getPlan().isActivo())
                 .orElse(null);
         if (activa == null) {
@@ -269,7 +269,7 @@ public class AsistenciaService {
         LocalDate hoy = LocalDate.now(clock);
         Suscripcion activa = suscripcionRepository
                 .findByUsuarioIdAndEstado(usuario.getId(), EstadoSuscripcion.ACTIVA)
-                .filter(s -> !s.getFechaFin().isBefore(hoy))
+                .filter(s -> VigenciaSuscripcion.vigente(s, hoy))
                 .filter(s -> s.getPlan() != null && s.getPlan().isActivo())
                 .orElse(null);
         if (activa == null) {

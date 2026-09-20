@@ -15,6 +15,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -36,6 +38,7 @@ public class EntrenadorService {
     private final UsuarioRepository usuarioRepository;
     private final SuscripcionRepository suscripcionRepository;
     private final AsignacionEntrenadorRepository asignacionEntrenadorRepository;
+    private final Clock clock;
 
     /**
      * CLIENTES activos con plan activo que incluye entrenador personal, con
@@ -62,9 +65,12 @@ public class EntrenadorService {
             activasPorCliente.put(suscripcion.getUsuario().getId(), suscripcion);
         }
 
+        // D1-A: la elegibilidad exige plan VIGENTE (fechaFin >= hoy Bogotá),
+        // no solo ACTIVA almacenada.
+        LocalDate hoy = LocalDate.now(clock);
         List<ClienteElegibleDTO> elegibles = new ArrayList<>();
         for (Usuario cliente : clientesActivos) {
-            if (tienePlanConEntrenadorPersonal(activasPorCliente.get(cliente.getId()))) {
+            if (tienePlanConEntrenadorPersonal(activasPorCliente.get(cliente.getId()), hoy)) {
                 elegibles.add(ClienteElegibleDTO.from(cliente, acompanados.get(cliente.getId())));
             }
         }
@@ -131,17 +137,19 @@ public class EntrenadorService {
                 .stream().map(HistorialAcompanamientoDTO::from).toList();
     }
 
-    private boolean tienePlanConEntrenadorPersonal(Suscripcion activa) {
-        return activa != null
+    private boolean tienePlanConEntrenadorPersonal(Suscripcion activa, LocalDate hoy) {
+        return VigenciaSuscripcion.vigente(activa, hoy)
                 && activa.getPlan() != null
                 && activa.getPlan().isActivo()
                 && activa.getPlan().isIncluyeEntrenadorPersonal();
     }
 
     private boolean tienePlanConEntrenadorPersonal(Long clienteId) {
+        LocalDate hoy = LocalDate.now(clock);
         return suscripcionRepository.findByUsuarioIdAndEstado(clienteId, EstadoSuscripcion.ACTIVA)
+                .filter(s -> VigenciaSuscripcion.vigente(s, hoy))
                 .map(Suscripcion::getPlan)
-                .map(plan -> plan.isActivo() && plan.isIncluyeEntrenadorPersonal())
+                .map(plan -> plan != null && plan.isActivo() && plan.isIncluyeEntrenadorPersonal())
                 .orElse(false);
     }
 }

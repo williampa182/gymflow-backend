@@ -14,12 +14,14 @@ import com.gymflow.backend.repository.UsuarioRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -38,7 +40,13 @@ class EntrenadorServiceTest {
     @Mock
     private AsignacionEntrenadorRepository asignacionEntrenadorRepository;
 
-    @InjectMocks
+    // D1-A: Clock fijo (hoy 2026-08-03 Bogotá) + construcción manual, mismo
+    // patrón que SuscripcionServiceTest: la elegibilidad depende de fechaFin.
+    private static final ZoneId BOGOTA = ZoneId.of("America/Bogota");
+    private static final LocalDate HOY = LocalDate.of(2026, 8, 3);
+    private static final LocalDate FIN_VIGENTE = LocalDate.of(2026, 9, 30);
+    private static final LocalDate FIN_VENCIDA = LocalDate.of(2026, 7, 31);
+
     private EntrenadorService entrenadorService;
 
     private Usuario entrenador;
@@ -47,6 +55,10 @@ class EntrenadorServiceTest {
 
     @BeforeEach
     void setUp() {
+        Clock clock = Clock.fixed(
+                Instant.parse("2026-08-03T15:00:00Z"), BOGOTA);
+        entrenadorService = new EntrenadorService(
+                usuarioRepository, suscripcionRepository, asignacionEntrenadorRepository, clock);
         entrenador = Usuario.builder().id(1L).nombre("Coach Ana").email("ana@gymflow.test")
                 .rol(Rol.ENTRENADOR).activo(true).build();
         clienteElegible = Usuario.builder().id(2L).nombre("Cliente Beto").email("beto@gymflow.test")
@@ -62,6 +74,13 @@ class EntrenadorServiceTest {
                 .build();
     }
 
+    private Suscripcion suscripcionVigente() {
+        return Suscripcion.builder()
+                .usuario(clienteElegible).plan(planConAcompañamiento)
+                .fechaInicio(HOY).fechaFin(FIN_VIGENTE)
+                .estado(EstadoSuscripcion.ACTIVA).build();
+    }
+
     @Test
     void listarClientesElegibles_soloClientesConPlanQueIncluyeAcompañamiento() {
         Usuario sinPlan = Usuario.builder().id(3L).nombre("Cliente Sin Plan").rol(Rol.CLIENTE).activo(true).build();
@@ -71,9 +90,7 @@ class EntrenadorServiceTest {
         when(usuarioRepository.findByRolAndActivo(Rol.CLIENTE, true))
                 .thenReturn(List.of(clienteElegible, sinPlan));
         when(suscripcionRepository.findByEstadoAndUsuarioIdIn(EstadoSuscripcion.ACTIVA, List.of(2L, 3L)))
-                .thenReturn(List.of(Suscripcion.builder()
-                        .usuario(clienteElegible).plan(planConAcompañamiento)
-                        .fechaInicio(LocalDate.now()).estado(EstadoSuscripcion.ACTIVA).build()));
+                .thenReturn(List.of(suscripcionVigente()));
 
         List<ClienteElegibleDTO> elegibles = entrenadorService.listarClientesElegibles("ana@gymflow.test");
 
@@ -93,9 +110,7 @@ class EntrenadorServiceTest {
                 .thenReturn(List.of(asignacion));
         when(usuarioRepository.findByRolAndActivo(Rol.CLIENTE, true)).thenReturn(List.of(clienteElegible));
         when(suscripcionRepository.findByEstadoAndUsuarioIdIn(EstadoSuscripcion.ACTIVA, List.of(2L)))
-                .thenReturn(List.of(Suscripcion.builder()
-                        .usuario(clienteElegible).plan(planConAcompañamiento)
-                        .fechaInicio(LocalDate.now()).estado(EstadoSuscripcion.ACTIVA).build()));
+                .thenReturn(List.of(suscripcionVigente()));
 
         List<ClienteElegibleDTO> elegibles = entrenadorService.listarClientesElegibles("ana@gymflow.test");
 
@@ -121,7 +136,7 @@ class EntrenadorServiceTest {
         when(suscripcionRepository.findByUsuarioIdAndEstado(2L, EstadoSuscripcion.ACTIVA))
                 .thenReturn(Optional.of(Suscripcion.builder()
                         .usuario(clienteElegible).plan(Plan.builder().id(2L).activo(true).incluyeEntrenadorPersonal(false).build())
-                        .fechaInicio(LocalDate.now()).estado(EstadoSuscripcion.ACTIVA).build()));
+                        .fechaInicio(HOY).fechaFin(FIN_VIGENTE).estado(EstadoSuscripcion.ACTIVA).build()));
 
         assertThatThrownBy(() -> entrenadorService.asignarme("ana@gymflow.test", 2L))
                 .isInstanceOf(RuntimeException.class)
@@ -135,9 +150,7 @@ class EntrenadorServiceTest {
         when(usuarioRepository.findByEmail("ana@gymflow.test")).thenReturn(Optional.of(entrenador));
         when(usuarioRepository.findById(2L)).thenReturn(Optional.of(clienteElegible));
         when(suscripcionRepository.findByUsuarioIdAndEstado(2L, EstadoSuscripcion.ACTIVA))
-                .thenReturn(Optional.of(Suscripcion.builder()
-                        .usuario(clienteElegible).plan(planConAcompañamiento)
-                        .fechaInicio(LocalDate.now()).estado(EstadoSuscripcion.ACTIVA).build()));
+                .thenReturn(Optional.of(suscripcionVigente()));
         when(asignacionEntrenadorRepository.findByClienteIdAndActivaTrue(2L))
                 .thenReturn(Optional.of(AsignacionEntrenador.builder()
                         .id(5L).cliente(clienteElegible).entrenador(entrenador).build()));
@@ -154,14 +167,45 @@ class EntrenadorServiceTest {
         when(usuarioRepository.findByEmail("ana@gymflow.test")).thenReturn(Optional.of(entrenador));
         when(usuarioRepository.findById(2L)).thenReturn(Optional.of(clienteElegible));
         when(suscripcionRepository.findByUsuarioIdAndEstado(2L, EstadoSuscripcion.ACTIVA))
-                .thenReturn(Optional.of(Suscripcion.builder()
-                        .usuario(clienteElegible).plan(planConAcompañamiento)
-                        .fechaInicio(LocalDate.now()).estado(EstadoSuscripcion.ACTIVA).build()));
+                .thenReturn(Optional.of(suscripcionVigente()));
         when(asignacionEntrenadorRepository.findByClienteIdAndActivaTrue(2L)).thenReturn(Optional.empty());
 
         entrenadorService.asignarme("ana@gymflow.test", 2L);
 
         verify(asignacionEntrenadorRepository).save(any(AsignacionEntrenador.class));
+    }
+
+    @Test
+    void listarClientesElegibles_suscripcionVencida_noEsElegible() {
+        // D1-A: ACTIVA con fecha pasada no cuenta aunque incluya entrenador.
+        when(usuarioRepository.findByEmail("ana@gymflow.test")).thenReturn(Optional.of(entrenador));
+        when(asignacionEntrenadorRepository.findByEntrenadorIdAndActivaTrueOrderByAsignadoEnDesc(1L))
+                .thenReturn(List.of());
+        when(usuarioRepository.findByRolAndActivo(Rol.CLIENTE, true)).thenReturn(List.of(clienteElegible));
+        when(suscripcionRepository.findByEstadoAndUsuarioIdIn(EstadoSuscripcion.ACTIVA, List.of(2L)))
+                .thenReturn(List.of(Suscripcion.builder()
+                        .usuario(clienteElegible).plan(planConAcompañamiento)
+                        .fechaInicio(HOY.minusDays(60)).fechaFin(FIN_VENCIDA)
+                        .estado(EstadoSuscripcion.ACTIVA).build()));
+
+        assertThat(entrenadorService.listarClientesElegibles("ana@gymflow.test")).isEmpty();
+    }
+
+    @Test
+    void asignarme_suscripcionVencida_lanzaExcepcion() {
+        when(usuarioRepository.findByEmail("ana@gymflow.test")).thenReturn(Optional.of(entrenador));
+        when(usuarioRepository.findById(2L)).thenReturn(Optional.of(clienteElegible));
+        when(suscripcionRepository.findByUsuarioIdAndEstado(2L, EstadoSuscripcion.ACTIVA))
+                .thenReturn(Optional.of(Suscripcion.builder()
+                        .usuario(clienteElegible).plan(planConAcompañamiento)
+                        .fechaInicio(HOY.minusDays(60)).fechaFin(FIN_VENCIDA)
+                        .estado(EstadoSuscripcion.ACTIVA).build()));
+
+        assertThatThrownBy(() -> entrenadorService.asignarme("ana@gymflow.test", 2L))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("no incluye entrenador personal");
+
+        verify(asignacionEntrenadorRepository, never()).save(any());
     }
 
     @Test

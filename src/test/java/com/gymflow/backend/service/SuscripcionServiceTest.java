@@ -96,7 +96,9 @@ class SuscripcionServiceTest {
         request = new SuscripcionRequestDTO();
         request.setUsuarioId(1L);
         request.setPlanId(1L);
-        request.setFechaInicio(LocalDate.of(2026, 7, 1));
+        // D1-A: inicio vigente respecto al clock fijo (hoy 2026-08-03 Bogotá)
+        // para que la nueva nazca ACTIVA también en el DTO derivado.
+        request.setFechaInicio(LocalDate.of(2026, 8, 1));
     }
 
     @Test
@@ -112,13 +114,15 @@ class SuscripcionServiceTest {
         assertThat(response.getNombreUsuario()).isEqualTo("William Admin");
         assertThat(response.getNombrePlan()).isEqualTo("Plan Mensual");
         assertThat(response.getEstado()).isEqualTo(EstadoSuscripcion.ACTIVA);
-        assertThat(response.getFechaFin()).isEqualTo(LocalDate.of(2026, 7, 31));
+        assertThat(response.getFechaFin()).isEqualTo(LocalDate.of(2026, 8, 31));
         verify(suscripcionRepository).save(any());
     }
 
     @Test
     @SuppressWarnings("null")
     void crear_usuarioYaTieneActiva_lanzaExcepcion() {
+        // D1-A: la existente debe estar VIGENTE para bloquear (fin futuro).
+        suscripcion.setFechaFin(LocalDate.of(2026, 9, 30));
         when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
         when(planRepository.findById(1L)).thenReturn(Optional.of(plan));
         when(suscripcionRepository.findByUsuarioIdAndEstado(1L, EstadoSuscripcion.ACTIVA))
@@ -127,6 +131,24 @@ class SuscripcionServiceTest {
         assertThatThrownBy(() -> suscripcionService.crear(request))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("ya tiene una suscripción activa");
+    }
+
+    @Test
+    @SuppressWarnings("null")
+    void crear_suscripcionVencida_transicionaAVencidaYcreaNueva() {
+        // D1-A: la fixture base (fin 2026-07-31) está vencida respecto al
+        // clock fijo (hoy 2026-08-03): renovar debe funcionar sin cancelar.
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+        when(planRepository.findById(1L)).thenReturn(Optional.of(plan));
+        when(suscripcionRepository.findByUsuarioIdAndEstado(1L, EstadoSuscripcion.ACTIVA))
+                .thenReturn(Optional.of(suscripcion));
+
+        SuscripcionResponseDTO response = suscripcionService.crear(request);
+
+        assertThat(suscripcion.getEstado()).isEqualTo(EstadoSuscripcion.VENCIDA);
+        assertThat(response.getEstado()).isEqualTo(EstadoSuscripcion.ACTIVA);
+        verify(suscripcionRepository).saveAndFlush(suscripcion);
+        verify(suscripcionRepository).save(any(Suscripcion.class));
     }
 
     @Test
@@ -246,6 +268,8 @@ class SuscripcionServiceTest {
     @Test
     @SuppressWarnings("null")
     void inscribir_usuarioYaTieneActiva_lanzaExcepcion() {
+        // D1-A: idem crear — solo una VIGENTE bloquea.
+        suscripcion.setFechaFin(LocalDate.of(2026, 9, 30));
         when(usuarioRepository.findByEmail("william@gymflow.com")).thenReturn(Optional.of(usuario));
         when(planRepository.findById(1L)).thenReturn(Optional.of(plan));
         when(suscripcionRepository.findByUsuarioIdAndEstado(1L, EstadoSuscripcion.ACTIVA))

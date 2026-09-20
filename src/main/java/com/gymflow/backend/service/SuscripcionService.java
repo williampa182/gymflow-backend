@@ -37,8 +37,24 @@ public class SuscripcionService {
         Plan plan = planRepository.findById(request.getPlanId())
                 .orElseThrow(() -> new RuntimeException("Plan no encontrado con id: " + request.getPlanId()));
 
+        // D1-A: solo una suscripción VIGENTE bloquea. Si la existente está
+        // vencida de facto (ACTIVA con fecha pasada), se transiciona a
+        // VENCIDA en esta misma transacción y la nueva nace ACTIVA
+        // (renovación sin cancelación manual).
+        LocalDate hoy = LocalDate.now(clock);
         suscripcionRepository.findByUsuarioIdAndEstado(usuario.getId(), EstadoSuscripcion.ACTIVA)
-                .ifPresent(s -> { throw new RuntimeException("El usuario ya tiene una suscripción activa"); });
+                .ifPresent(vieja -> {
+                    if (VigenciaSuscripcion.vigente(vieja, hoy)) {
+                        throw new RuntimeException("El usuario ya tiene una suscripción activa");
+                    }
+                    vieja.setEstado(EstadoSuscripcion.VENCIDA);
+                    // saveAndFlush a propósito (no save): Hibernate vacía
+                    // INSERTs antes que UPDATEs; sin flush explícito el
+                    // INSERT de la nueva choca con la vieja aún ACTIVA en
+                    // el índice parcial 001 (23505) aunque el UPDATE venga
+                    // antes en el código.
+                    suscripcionRepository.saveAndFlush(vieja);
+                });
 
         Suscripcion suscripcion = Suscripcion.builder()
                 .usuario(usuario)
@@ -53,10 +69,10 @@ public class SuscripcionService {
             // una ventana de carrera bajo concurrencia real (check-then-act
             // clásico): dos requests pueden pasar el chequeo antes de que
             // cualquiera de las dos haga commit. Este try/catch es la red de
-            // seguridad para cuando exista la constraint única parcial a
-            // nivel de Postgres (ver scripts/migrations/001_unique_suscripcion_activa.sql
-            // — TODAVÍA NO APLICADA, hay que correrla a mano). Sin esa
-            // constraint, este catch no dispara y la carrera sigue abierta.
+            // seguridad con la constraint única parcial a nivel de Postgres
+            // (scripts/migrations/001_unique_suscripcion_activa.sql).
+            // En renovación concurrente, el UPDATE de la vieja choca antes
+            // por @Version (OptimisticLockingFailureException → 409).
             suscripcionRepository.save(suscripcion);
         } catch (DataIntegrityViolationException e) {
             throw new RuntimeException("El usuario ya tiene una suscripción activa");
@@ -88,8 +104,19 @@ public class SuscripcionService {
             throw new RuntimeException("El plan no está disponible para inscribirse");
         }
 
+        // D1-A: igual que crear(): solo una VIGENTE bloquea; vencida de
+        // facto se transiciona a VENCIDA en esta transacción (renovación).
+        LocalDate hoy = LocalDate.now(clock);
         suscripcionRepository.findByUsuarioIdAndEstado(usuario.getId(), EstadoSuscripcion.ACTIVA)
-                .ifPresent(s -> { throw new RuntimeException("El usuario ya tiene una suscripción activa"); });
+                .ifPresent(vieja -> {
+                    if (VigenciaSuscripcion.vigente(vieja, hoy)) {
+                        throw new RuntimeException("El usuario ya tiene una suscripción activa");
+                    }
+                    vieja.setEstado(EstadoSuscripcion.VENCIDA);
+                    // saveAndFlush: ver comentario en crear() (orden de flush
+                    // INSERT-antes-que-UPDATE vs índice parcial 001).
+                    suscripcionRepository.saveAndFlush(vieja);
+                });
 
         // "Hoy" sale del Clock de Bogotá (RelojBogotaConfig), NO de
         // LocalDate.now() con la TZ del servidor: Railway corre UTC y un
@@ -107,9 +134,9 @@ public class SuscripcionService {
                 .build();
 
         try {
-            // Misma red de seguridad check-then-act que en crear(): espera la
+            // Misma red de seguridad check-then-act que en crear(): la
             // constraint única parcial 001_unique_suscripcion_activa.sql
-            // (TODAVÍA NO APLICADA) para cerrar la carrera a nivel BD.
+            // cierra la carrera a nivel BD.
             suscripcionRepository.save(suscripcion);
         } catch (DataIntegrityViolationException e) {
             throw new RuntimeException("El usuario ya tiene una suscripción activa");
@@ -117,11 +144,16 @@ public class SuscripcionService {
         return toDTO(suscripcion);
     }
 
+    // readOnly explícito: toDTO navega LAZY (usuario/plan) y fuera de una
+    // sesión (llamadas directas en tests, sin OpenSessionInView) eso es
+    // LazyInitializationException. Mismo patrón que AsistenciaService.
+    @Transactional(readOnly = true)
     public Page<SuscripcionResponseDTO> listarPorUsuario(Long usuarioId, Pageable pageable) {
         return suscripcionRepository.findByUsuarioId(usuarioId, pageable)
                 .map(this::toDTO);
     }
 
+    @Transactional(readOnly = true)
     public Page<SuscripcionResponseDTO> listarPorUsuarioEmail(String email, Pageable pageable) {
         Usuario usuario = usuarioRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado con email: " + email));
@@ -130,10 +162,23 @@ public class SuscripcionService {
                 .map(this::toDTO);
     }
 
+    @Transactional(readOnly = true)
     public Page<SuscripcionResponseDTO> listarPorEstado(EstadoSuscripcion estado, Pageable pageable) {
-        Page<Suscripcion> suscripciones = (estado != null)
-                ? suscripcionRepository.findByEstado(estado, pageable)
-                : suscripcionRepository.findAll(pageable);
+        // D1-A: ACTIVA/VENCIDA son derivadas por fecha (VigenciaSuscripcion),
+        // no el estado almacenado tal cual.
+        LocalDate hoy = LocalDate.now(clock);
+        Page<Suscripcion> suscripciones;
+        if (estado == null) {
+            suscripciones = suscripcionRepository.findAll(pageable);
+        } else if (estado == EstadoSuscripcion.ACTIVA) {
+            suscripciones = suscripcionRepository
+                    .findByEstadoAndFechaFinGreaterThanEqual(EstadoSuscripcion.ACTIVA, hoy, pageable);
+        } else if (estado == EstadoSuscripcion.VENCIDA) {
+            suscripciones = suscripcionRepository.findMorosas(
+                    EstadoSuscripcion.ACTIVA, EstadoSuscripcion.VENCIDA, hoy, pageable);
+        } else {
+            suscripciones = suscripcionRepository.findByEstado(estado, pageable);
+        }
 
         return suscripciones.map(this::toDTO);
     }
@@ -159,6 +204,9 @@ public class SuscripcionService {
     }
 
     private SuscripcionResponseDTO toDTO(Suscripcion s) {
+        // D1-A: el estado expuesto es el derivado (una ACTIVA con fecha pasada
+        // se muestra VENCIDA aunque el almacenamiento aún no haya rotado).
+        LocalDate hoy = LocalDate.now(clock);
         return SuscripcionResponseDTO.builder()
                 .id(s.getId())
                 .usuarioId(s.getUsuario().getId())
@@ -167,7 +215,8 @@ public class SuscripcionService {
                 .nombrePlan(s.getPlan().getNombre())
                 .fechaInicio(s.getFechaInicio())
                 .fechaFin(s.getFechaFin())
-                .estado(s.getEstado())
+                .estado(VigenciaSuscripcion.morosa(s, hoy)
+                        ? EstadoSuscripcion.VENCIDA : s.getEstado())
                 .creadoEn(s.getCreadoEn())
                 .build();
     }
