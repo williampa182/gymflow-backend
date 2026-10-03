@@ -1,6 +1,7 @@
 package com.gymflow.backend.service;
 
 import com.gymflow.backend.dto.SuscripcionRequestDTO;
+import com.gymflow.backend.dto.ConteoSuscripcionesDTO;
 import com.gymflow.backend.dto.SuscripcionResponseDTO;
 import com.gymflow.backend.model.Plan;
 import com.gymflow.backend.model.Suscripcion;
@@ -181,6 +182,17 @@ public class SuscripcionService {
         }
 
         return suscripciones.map(this::toDTO);
+    }
+
+    @Transactional(readOnly = true)
+    public ConteoSuscripcionesDTO contarPorEstado() {
+        LocalDate hoy = LocalDate.now(clock);
+        return new ConteoSuscripcionesDTO(
+                suscripcionRepository.countByEstadoAndFechaFinGreaterThanEqual(
+                        EstadoSuscripcion.ACTIVA, hoy),
+                suscripcionRepository.countMorosas(
+                        EstadoSuscripcion.ACTIVA, EstadoSuscripcion.VENCIDA, hoy),
+                suscripcionRepository.countByEstado(EstadoSuscripcion.CANCELADA));
     }
 
     @SuppressWarnings("null")

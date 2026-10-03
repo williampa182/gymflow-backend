@@ -2,6 +2,7 @@ package com.gymflow.backend.controller;
 
 import com.gymflow.backend.dto.InscripcionRequestDTO;
 import com.gymflow.backend.dto.SuscripcionRequestDTO;
+import com.gymflow.backend.dto.ConteoSuscripcionesDTO;
 import com.gymflow.backend.dto.SuscripcionResponseDTO;
 import com.gymflow.backend.model.enums.EstadoSuscripcion;
 import com.gymflow.backend.service.SuscripcionService;
@@ -69,6 +70,12 @@ public class SuscripcionController {
             @RequestParam(required = false) EstadoSuscripcion estado,
             @PageableDefault(size = 20, sort = "id") Pageable pageable) {
         return ResponseEntity.ok(suscripcionService.listarPorEstado(estado, pageable));
+    }
+
+    @GetMapping("/conteo-por-estado")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ConteoSuscripcionesDTO> contarPorEstado() {
+        return ResponseEntity.ok(suscripcionService.contarPorEstado());
     }
 
     @PatchMapping("/{id}/cancelar")

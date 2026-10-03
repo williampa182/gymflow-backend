@@ -1,6 +1,7 @@
 package com.gymflow.backend.controller;
 
 import com.gymflow.backend.dto.InscripcionRequestDTO;
+import com.gymflow.backend.dto.ConteoSuscripcionesDTO;
 import com.gymflow.backend.dto.SuscripcionResponseDTO;
 import com.gymflow.backend.service.SuscripcionService;
 import org.junit.jupiter.api.Test;
@@ -13,7 +14,10 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+
+import java.lang.reflect.Method;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -67,5 +71,26 @@ class SuscripcionControllerTest {
         assertThat(respuesta.getBody()).isSameAs(creada);
         verify(suscripcionService).inscribir("cliente@gymflow.test", 2L, LocalDate.of(2026, 8, 1));
         verifyNoMoreInteractions(suscripcionService);
+    }
+
+    @Test
+    void contarPorEstado_devuelve200_yDelegaEnElServicio() {
+        ConteoSuscripcionesDTO esperado = new ConteoSuscripcionesDTO(20L, 4L, 7L);
+        when(suscripcionService.contarPorEstado()).thenReturn(esperado);
+
+        ResponseEntity<ConteoSuscripcionesDTO> respuesta =
+                suscripcionController.contarPorEstado();
+
+        assertThat(respuesta.getStatusCode().value()).isEqualTo(200);
+        assertThat(respuesta.getBody()).isSameAs(esperado);
+        verify(suscripcionService).contarPorEstado();
+    }
+
+    @Test
+    void contarPorEstado_tienePreAuthorizeSoloAdmin() throws NoSuchMethodException {
+        Method method = SuscripcionController.class.getMethod("contarPorEstado");
+
+        assertThat(method.getAnnotation(PreAuthorize.class).value())
+                .isEqualTo("hasRole('ADMIN')");
     }
 }

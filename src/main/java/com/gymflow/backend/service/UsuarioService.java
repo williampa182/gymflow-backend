@@ -2,6 +2,7 @@ package com.gymflow.backend.service;
 
 import com.gymflow.backend.dto.CarnetResponseDTO;
 import com.gymflow.backend.dto.UsuarioResponseDTO;
+import com.gymflow.backend.dto.request.CrearClienteRequest;
 import com.gymflow.backend.model.Rutina;
 import com.gymflow.backend.model.Usuario;
 import com.gymflow.backend.model.enums.Rol;
@@ -16,9 +17,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.util.List;
 
 @Service
@@ -27,6 +30,7 @@ public class UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
     private final CodigoCarnetGenerator codigoCarnetGenerator;
+    private final PasswordEncoder passwordEncoder;
     private final AsistenciaRepository asistenciaRepository;
     private final AsignacionRutinaRepository asignacionRutinaRepository;
     private final RutinaRepository rutinaRepository;
@@ -207,6 +211,49 @@ public class UsuarioService {
                 .rol(u.getRol())
                 .activo(u.isActivo())
                 .creadoEn(u.getCreadoEn())
+                .tipoDocumento(u.getTipoDocumento())
+                .numeroDocumento(u.getNumeroDocumento())
+                .telefono(u.getTelefono())
                 .build();
+    }
+
+    @SuppressWarnings("null")
+    @Transactional
+    public UsuarioResponseDTO crearCliente(CrearClienteRequest request) {
+        String email = request.getEmail() == null || request.getEmail().isBlank()
+                ? null
+                : request.getEmail().trim();
+        if (email != null && usuarioRepository.existsByEmail(email)) {
+            throw new RuntimeException("Ya existe un usuario con ese email");
+        }
+        String tipo = request.getTipoDocumento().trim().toUpperCase();
+        String numero = request.getNumeroDocumento().trim().toUpperCase();
+        if (usuarioRepository.existsByTipoDocumentoAndNumeroDocumento(tipo, numero)) {
+            throw new RuntimeException("Ya existe un usuario con ese documento");
+        }
+        String codigoCarnet = codigoCarnetGenerator.generarUnico(
+                codigo -> usuarioRepository.existsByCodigoCarnet(codigo));
+        Usuario usuario = Usuario.builder()
+                .nombre(request.getNombre().trim())
+                .email(email)
+                .password(passwordEncoder.encode(generarPasswordAleatoria()))
+                .rol(Rol.CLIENTE)
+                .codigoCarnet(codigoCarnet)
+                .tipoDocumento(tipo)
+                .numeroDocumento(numero)
+                .telefono(request.getTelefono() == null ? null : request.getTelefono().trim())
+                .build();
+        usuarioRepository.save(usuario);
+        return toDTO(usuario);
+    }
+
+    private static String generarPasswordAleatoria() {
+        String alfabeto = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        SecureRandom aleatorio = new SecureRandom();
+        StringBuilder sb = new StringBuilder(24);
+        for (int i = 0; i < 24; i++) {
+            sb.append(alfabeto.charAt(aleatorio.nextInt(alfabeto.length())));
+        }
+        return sb.toString();
     }
 }

@@ -18,6 +18,8 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     Optional<Usuario> findByEmail(String email);
     boolean existsByEmail(String email);
     boolean existsByCodigoCarnet(String codigoCarnet);
+    boolean existsByTipoDocumentoAndNumeroDocumento(String tipoDocumento, String numeroDocumento);
+    Optional<Usuario> findByTipoDocumentoAndNumeroDocumento(String tipoDocumento, String numeroDocumento);
     // Kiosco (Fase 5): el código de carnet resuelve al usuario en el momento del
     // ingreso; nunca es clave de asistencias (la rotación no toca historial).
     Optional<Usuario> findByCodigoCarnet(String codigoCarnet);

@@ -19,4 +19,7 @@ public class UsuarioResponseDTO {
     private Rol rol;
     private boolean activo;
     private LocalDateTime creadoEn;
+    private String tipoDocumento;
+    private String numeroDocumento;
+    private String telefono;
 }

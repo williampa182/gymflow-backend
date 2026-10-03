@@ -3,6 +3,7 @@ package com.gymflow.backend.controller;
 import com.gymflow.backend.dto.CarnetResponseDTO;
 import com.gymflow.backend.dto.UsuarioResponseDTO;
 import com.gymflow.backend.dto.request.CambioRolRequest;
+import com.gymflow.backend.dto.request.CrearClienteRequest;
 import com.gymflow.backend.model.enums.Rol;
 import com.gymflow.backend.service.UsuarioService;
 import org.junit.jupiter.api.Test;
@@ -111,6 +112,36 @@ class UsuarioControllerTest {
     @Test
     void eliminar_tienePreAuthorizeSoloAdmin() throws NoSuchMethodException {
         Method method = UsuarioController.class.getMethod("eliminar", Long.class);
+
+        assertThat(method.getAnnotation(PreAuthorize.class).value())
+                .isEqualTo("hasRole('ADMIN')");
+    }
+
+    @Test
+    void crear_devuelve201_yDelegaEnElServicio() {
+        CrearClienteRequest request = new CrearClienteRequest();
+        request.setNombre("Socio Nuevo");
+        request.setEmail("socio@gymflow.com");
+        request.setTipoDocumento("CC");
+        request.setNumeroDocumento("123456");
+        UsuarioResponseDTO esperado = UsuarioResponseDTO.builder()
+                .id(9L)
+                .rol(Rol.CLIENTE)
+                .tipoDocumento("CC")
+                .numeroDocumento("123456")
+                .build();
+        when(usuarioService.crearCliente(request)).thenReturn(esperado);
+
+        ResponseEntity<UsuarioResponseDTO> respuesta = usuarioController.crear(request);
+
+        assertThat(respuesta.getStatusCode().value()).isEqualTo(201);
+        assertThat(respuesta.getBody()).isSameAs(esperado);
+        verify(usuarioService).crearCliente(request);
+    }
+
+    @Test
+    void crear_tienePreAuthorizeSoloAdmin() throws NoSuchMethodException {
+        Method method = UsuarioController.class.getMethod("crear", CrearClienteRequest.class);
 
         assertThat(method.getAnnotation(PreAuthorize.class).value())
                 .isEqualTo("hasRole('ADMIN')");

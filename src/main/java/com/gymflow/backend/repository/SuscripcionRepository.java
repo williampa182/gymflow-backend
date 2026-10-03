@@ -46,6 +46,17 @@ public interface SuscripcionRepository extends JpaRepository<Suscripcion, Long> 
             @Param("hoy") LocalDate hoy,
             Pageable pageable);
 
+    @Query("""
+            select count(s)
+            from Suscripcion s
+            where s.estado = :vencida
+               or (s.estado = :activa and s.fechaFin < :hoy)
+            """)
+    long countMorosas(
+            @Param("activa") EstadoSuscripcion activa,
+            @Param("vencida") EstadoSuscripcion vencida,
+            @Param("hoy") LocalDate hoy);
+
     // Borrado de usuarios (ADMIN): limpia las suscripciones del usuario
     // antes de borrarlo (FK sin cascada). Derived query.
     void deleteByUsuarioId(Long usuarioId);

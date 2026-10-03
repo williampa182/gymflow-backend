@@ -27,7 +27,7 @@ public class Usuario implements UserDetails {
     @Column(nullable = false)
     private String nombre;
 
-    @Column(nullable = false, unique = true)
+    @Column(unique = true)
     private String email;
 
     @Column(nullable = false)
@@ -50,6 +50,15 @@ public class Usuario implements UserDetails {
     // código → usuario en el momento, la rotación no toca historial.
     @Column(name = "codigo_carnet", length = 8)
     private String codigoCarnet;
+
+    @Column(name = "tipo_documento", length = 10)
+    private String tipoDocumento;
+
+    @Column(name = "numero_documento", length = 30)
+    private String numeroDocumento;
+
+    @Column(length = 30)
+    private String telefono;
 
     @Column(name = "creado_en")
     private LocalDateTime creadoEn;

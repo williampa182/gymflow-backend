@@ -82,8 +82,11 @@ public class NotificacionVencimientoService {
         int enviadas = 0;
 
         for (Suscripcion suscripcion : pendientes) {
+            Usuario usuario = suscripcion.getUsuario();
+            if (usuario.getEmail() == null || usuario.getEmail().isBlank()) {
+                continue;
+            }
             try {
-                Usuario usuario = suscripcion.getUsuario();
                 Plan plan = suscripcion.getPlan();
                 String fechaVencimiento = suscripcion.getFechaFin().toString();
                 String html = PlantillaEmailVencimiento.generarHtml(
