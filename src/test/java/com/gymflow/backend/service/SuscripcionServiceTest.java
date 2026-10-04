@@ -9,6 +9,7 @@ import com.gymflow.backend.model.enums.EstadoSuscripcion;
 import com.gymflow.backend.model.enums.Rol;
 import com.gymflow.backend.model.enums.TipoPlan;
 import com.gymflow.backend.repository.PlanRepository;
+import com.gymflow.backend.repository.AsistenciaRepository;
 import com.gymflow.backend.repository.SuscripcionRepository;
 import com.gymflow.backend.repository.UsuarioRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +46,9 @@ class SuscripcionServiceTest {
     @Mock
     private PlanRepository planRepository;
 
+    @Mock
+    private AsistenciaRepository asistenciaRepository;
+
     // Clock fijo de Bogotá (patrón Fase 5): el servicio inyecta el bean
     // RelojBogotaConfig en prod; acá se fija la fecha para que "hoy" sea
     // determinístico. 2026-08-03T15:00:00Z = 2026-08-03 10:00 en Bogotá.
@@ -64,7 +68,8 @@ class SuscripcionServiceTest {
         // @Mock/@Spy), y el Clock fijo es valor, no mock — la fecha "hoy"
         // debe ser determinística (Fase 5, regla 7).
         suscripcionService = new SuscripcionService(
-                suscripcionRepository, usuarioRepository, planRepository, clock);
+                suscripcionRepository, usuarioRepository, planRepository,
+                asistenciaRepository, clock);
 
         usuario = Usuario.builder()
                 .id(1L)

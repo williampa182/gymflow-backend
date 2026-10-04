@@ -32,4 +32,18 @@ class GlobalExceptionHandlerTest {
                 new RuntimeException("No tienes un plan activo para registrar tu entrada"));
         assertThat(respuesta.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
+
+    @Test
+    void archivoDeImportacionInvalido_mapeaA400() {
+        ResponseEntity<Map<String, Object>> respuesta = handler.handleGenericRuntime(
+                new RuntimeException("No se pudo importar: el archivo está vacío"));
+        assertThat(respuesta.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void membresiaCongelada_mapeaA409() {
+        ResponseEntity<Map<String, Object>> respuesta = handler.handleGenericRuntime(
+                new RuntimeException("La membresía está congelada: descongélala para registrar entradas"));
+        assertThat(respuesta.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    }
 }

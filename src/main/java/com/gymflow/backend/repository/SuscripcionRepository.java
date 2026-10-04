@@ -27,6 +27,12 @@ public interface SuscripcionRepository extends JpaRepository<Suscripcion, Long> 
     // fechaFin pasada NO es vigente aunque el estado almacenado lo diga.
     Page<Suscripcion> findByEstadoAndFechaFinGreaterThanEqual(
             EstadoSuscripcion estado, LocalDate hoy, Pageable pageable);
+    // En-riesgo (ADMIN GET /suscripciones/en-riesgo): sobrecargas no
+    // paginadas para batch (porVencer 7 días + vigentes para inactivos).
+    List<Suscripcion> findByEstadoAndFechaFinBetween(
+            EstadoSuscripcion estado, LocalDate desde, LocalDate hasta);
+    List<Suscripcion> findByEstadoAndFechaFinGreaterThanEqual(
+            EstadoSuscripcion estado, LocalDate fecha);
     long countByEstadoAndFechaFinGreaterThanEqual(EstadoSuscripcion estado, LocalDate hoy);
     long countByEstadoAndFechaFinLessThan(EstadoSuscripcion estado, LocalDate hoy);
 

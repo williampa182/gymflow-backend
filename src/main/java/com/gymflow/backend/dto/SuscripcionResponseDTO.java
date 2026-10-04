@@ -23,4 +23,5 @@ public class SuscripcionResponseDTO {
     private LocalDate fechaFin;
     private EstadoSuscripcion estado;
     private LocalDateTime creadoEn;
+    private LocalDate congeladaDesde;
 }

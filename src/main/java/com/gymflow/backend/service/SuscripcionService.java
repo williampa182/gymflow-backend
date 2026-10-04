@@ -1,13 +1,17 @@
 package com.gymflow.backend.service;
 
+import com.gymflow.backend.dto.EnRiesgoDTO;
 import com.gymflow.backend.dto.SuscripcionRequestDTO;
 import com.gymflow.backend.dto.ConteoSuscripcionesDTO;
 import com.gymflow.backend.dto.SuscripcionResponseDTO;
+import com.gymflow.backend.model.Asistencia;
 import com.gymflow.backend.model.Plan;
 import com.gymflow.backend.model.Suscripcion;
 import com.gymflow.backend.model.Usuario;
 import com.gymflow.backend.model.enums.EstadoSuscripcion;
+import com.gymflow.backend.repository.AsistenciaRepository;
 import com.gymflow.backend.repository.PlanRepository;
+import com.gymflow.backend.repository.AsistenciaRepository;
 import com.gymflow.backend.repository.SuscripcionRepository;
 import com.gymflow.backend.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +23,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -27,6 +36,7 @@ public class SuscripcionService {
     private final SuscripcionRepository suscripcionRepository;
     private final UsuarioRepository usuarioRepository;
     private final PlanRepository planRepository;
+    private final AsistenciaRepository asistenciaRepository;
     private final Clock clock;
 
     @SuppressWarnings("null")
@@ -55,6 +65,13 @@ public class SuscripcionService {
                     // el índice parcial 001 (23505) aunque el UPDATE venga
                     // antes en el código.
                     suscripcionRepository.saveAndFlush(vieja);
+                });
+        // Congelada bloquea: primero se descongela (la descongelación
+        // extiende la fecha), no se pisa con una nueva encima.
+        suscripcionRepository.findByUsuarioIdAndEstado(usuario.getId(), EstadoSuscripcion.CONGELADA)
+                .ifPresent(congelada -> {
+                    throw new RuntimeException(
+                            "El usuario ya tiene una suscripción congelada: descongélala antes de crear una nueva");
                 });
 
         Suscripcion suscripcion = Suscripcion.builder()
@@ -117,6 +134,11 @@ public class SuscripcionService {
                     // saveAndFlush: ver comentario en crear() (orden de flush
                     // INSERT-antes-que-UPDATE vs índice parcial 001).
                     suscripcionRepository.saveAndFlush(vieja);
+                });
+        suscripcionRepository.findByUsuarioIdAndEstado(usuario.getId(), EstadoSuscripcion.CONGELADA)
+                .ifPresent(congelada -> {
+                    throw new RuntimeException(
+                            "El usuario ya tiene una suscripción congelada: descongélala antes de crear una nueva");
                 });
 
         // "Hoy" sale del Clock de Bogotá (RelojBogotaConfig), NO de
@@ -192,7 +214,52 @@ public class SuscripcionService {
                         EstadoSuscripcion.ACTIVA, hoy),
                 suscripcionRepository.countMorosas(
                         EstadoSuscripcion.ACTIVA, EstadoSuscripcion.VENCIDA, hoy),
-                suscripcionRepository.countByEstado(EstadoSuscripcion.CANCELADA));
+                suscripcionRepository.countByEstado(EstadoSuscripcion.CANCELADA),
+                suscripcionRepository.countByEstado(EstadoSuscripcion.CONGELADA));
+    }
+
+    @Transactional(readOnly = true)
+    public EnRiesgoDTO sociosEnRiesgo() {
+        LocalDate hoy = LocalDate.now(clock);
+        List<EnRiesgoDTO.PorVencerDTO> porVencer = suscripcionRepository
+                .findByEstadoAndFechaFinBetween(EstadoSuscripcion.ACTIVA, hoy, hoy.plusDays(7))
+                .stream()
+                .map(s -> new EnRiesgoDTO.PorVencerDTO(
+                        s.getUsuario().getId(),
+                        s.getUsuario().getNombre(),
+                        s.getFechaFin(),
+                        ChronoUnit.DAYS.between(hoy, s.getFechaFin())))
+                .toList();
+
+        List<Suscripcion> vigentes = suscripcionRepository
+                .findByEstadoAndFechaFinGreaterThanEqual(EstadoSuscripcion.ACTIVA, hoy)
+                .stream().limit(500).toList();
+        LocalDate desde = hoy.minusDays(15);
+        Map<Long, LocalDate> ultimaPorUsuario = new HashMap<>();
+        if (!vigentes.isEmpty() && asistenciaRepository != null) {
+            List<Long> ids = vigentes.stream().map(s -> s.getUsuario().getId()).toList();
+            for (Asistencia a : asistenciaRepository
+                    .findByUsuarioIdInAndFechaBetween(ids, desde, hoy)) {
+                ultimaPorUsuario.merge(a.getUsuario().getId(), a.getFecha(),
+                        (previa, nueva) -> previa.isAfter(nueva) ? previa : nueva);
+            }
+        }
+        List<EnRiesgoDTO.InactivoDTO> inactivos = vigentes.stream()
+                .filter(s -> {
+                    LocalDate ultima = ultimaPorUsuario.get(s.getUsuario().getId());
+                    return ultima == null || ultima.isBefore(desde);
+                })
+                .map(s -> {
+                    LocalDate ultima = ultimaPorUsuario.get(s.getUsuario().getId());
+                    long dias = ultima == null
+                            ? ChronoUnit.DAYS.between(s.getFechaInicio(), hoy)
+                            : ChronoUnit.DAYS.between(ultima, hoy);
+                    return new EnRiesgoDTO.InactivoDTO(
+                            s.getUsuario().getId(), s.getUsuario().getNombre(), ultima, dias);
+                })
+                .sorted(Comparator.comparingLong(EnRiesgoDTO.InactivoDTO::diasSinVenir).reversed())
+                .toList();
+        return new EnRiesgoDTO(porVencer, inactivos);
     }
 
     @SuppressWarnings("null")
@@ -201,8 +268,9 @@ public class SuscripcionService {
         Suscripcion suscripcion = suscripcionRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Suscripción no encontrada con id: " + id));
 
-        if (suscripcion.getEstado() != EstadoSuscripcion.ACTIVA) {
-            throw new RuntimeException("Solo se pueden cancelar suscripciones activas");
+        if (suscripcion.getEstado() != EstadoSuscripcion.ACTIVA
+                && suscripcion.getEstado() != EstadoSuscripcion.CONGELADA) {
+            throw new RuntimeException("Solo se pueden cancelar suscripciones activas o congeladas");
         }
 
         suscripcion.setEstado(EstadoSuscripcion.CANCELADA);
@@ -211,6 +279,46 @@ public class SuscripcionService {
         // misma fila entre el findById de arriba y este save (ej. dos
         // cancelaciones simultáneas de la misma suscripción). El
         // GlobalExceptionHandler ya traduce eso a un 409 claro.
+        suscripcionRepository.save(suscripcion);
+        return toDTO(suscripcion);
+    }
+
+    @SuppressWarnings("null")
+    @Transactional
+    public SuscripcionResponseDTO congelar(Long id) {
+        Suscripcion suscripcion = suscripcionRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Suscripción no encontrada con id: " + id));
+
+        LocalDate hoy = LocalDate.now(clock);
+        if (!VigenciaSuscripcion.vigente(suscripcion, hoy)) {
+            throw new RuntimeException("Solo se pueden congelar suscripciones activas y vigentes");
+        }
+
+        suscripcion.setEstado(EstadoSuscripcion.CONGELADA);
+        suscripcion.setCongeladaDesde(hoy);
+        suscripcionRepository.save(suscripcion);
+        return toDTO(suscripcion);
+    }
+
+    @SuppressWarnings("null")
+    @Transactional
+    public SuscripcionResponseDTO descongelar(Long id) {
+        Suscripcion suscripcion = suscripcionRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Suscripción no encontrada con id: " + id));
+
+        if (suscripcion.getEstado() != EstadoSuscripcion.CONGELADA) {
+            throw new RuntimeException("Solo se pueden descongelar suscripciones congeladas");
+        }
+
+        LocalDate hoy = LocalDate.now(clock);
+        long diasCongelada = 0;
+        if (suscripcion.getCongeladaDesde() != null && !suscripcion.getCongeladaDesde().isAfter(hoy)) {
+            diasCongelada = java.time.temporal.ChronoUnit.DAYS.between(
+                    suscripcion.getCongeladaDesde(), hoy);
+        }
+        suscripcion.setFechaFin(suscripcion.getFechaFin().plusDays(diasCongelada));
+        suscripcion.setEstado(EstadoSuscripcion.ACTIVA);
+        suscripcion.setCongeladaDesde(null);
         suscripcionRepository.save(suscripcion);
         return toDTO(suscripcion);
     }
@@ -230,6 +338,7 @@ public class SuscripcionService {
                 .estado(VigenciaSuscripcion.morosa(s, hoy)
                         ? EstadoSuscripcion.VENCIDA : s.getEstado())
                 .creadoEn(s.getCreadoEn())
+                .congeladaDesde(s.getCongeladaDesde())
                 .build();
     }
 }

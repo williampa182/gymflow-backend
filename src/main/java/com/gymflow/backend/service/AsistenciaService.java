@@ -43,6 +43,14 @@ public class AsistenciaService {
     private final AsignacionEntrenadorRepository asignacionEntrenadorRepository;
     private final Clock clock;
 
+    private void verificarNoCongelada(Long usuarioId) {
+        suscripcionRepository.findByUsuarioIdAndEstado(usuarioId, EstadoSuscripcion.CONGELADA)
+                .ifPresent(congelada -> {
+                    throw new RuntimeException(
+                            "La membresía está congelada: descongélala para registrar entradas");
+                });
+    }
+
     /**
      * Check-in self-service del CLIENTE (reglas 1-5 y 8 de la spec). Orden de
      * validación deliberado: inactivo → 403, sin plan activo → 400, ya
@@ -67,6 +75,7 @@ public class AsistenciaService {
         // ACTIVA, no vencida y con plan.isActivo() (alineado con
         // EntrenadorService.tienePlanConEntrenadorPersonal).
         LocalDate hoy = LocalDate.now(clock);
+        verificarNoCongelada(usuario.getId());
         Suscripcion activa = suscripcionRepository
                 .findByUsuarioIdAndEstado(usuario.getId(), EstadoSuscripcion.ACTIVA)
                 .filter(s -> VigenciaSuscripcion.vigente(s, hoy))
@@ -133,6 +142,7 @@ public class AsistenciaService {
         }
 
         LocalDate hoy = LocalDate.now(clock);
+        verificarNoCongelada(usuario.getId());
         Suscripcion activa = suscripcionRepository
                 .findByUsuarioIdAndEstado(usuario.getId(), EstadoSuscripcion.ACTIVA)
                 .filter(s -> VigenciaSuscripcion.vigente(s, hoy))
@@ -267,6 +277,7 @@ public class AsistenciaService {
         }
 
         LocalDate hoy = LocalDate.now(clock);
+        verificarNoCongelada(usuario.getId());
         Suscripcion activa = suscripcionRepository
                 .findByUsuarioIdAndEstado(usuario.getId(), EstadoSuscripcion.ACTIVA)
                 .filter(s -> VigenciaSuscripcion.vigente(s, hoy))

@@ -3,6 +3,7 @@ package com.gymflow.backend.service;
 import com.gymflow.backend.dto.ConteoSuscripcionesDTO;
 import com.gymflow.backend.model.enums.EstadoSuscripcion;
 import com.gymflow.backend.repository.PlanRepository;
+import com.gymflow.backend.repository.AsistenciaRepository;
 import com.gymflow.backend.repository.SuscripcionRepository;
 import com.gymflow.backend.repository.UsuarioRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,6 +32,9 @@ class SuscripcionServiceConteoTest {
     @Mock
     private PlanRepository planRepository;
 
+    @Mock
+    private AsistenciaRepository asistenciaRepository;
+
     private final Clock clock = Clock.fixed(
             Instant.parse("2026-10-03T12:00:00Z"), ZoneId.of("America/Bogota"));
 
@@ -39,7 +43,8 @@ class SuscripcionServiceConteoTest {
     @BeforeEach
     void setUp() {
         suscripcionService = new SuscripcionService(
-                suscripcionRepository, usuarioRepository, planRepository, clock);
+                suscripcionRepository, usuarioRepository, planRepository,
+                asistenciaRepository, clock);
     }
 
     @Test
@@ -50,9 +55,10 @@ class SuscripcionServiceConteoTest {
         when(suscripcionRepository.countMorosas(
                 EstadoSuscripcion.ACTIVA, EstadoSuscripcion.VENCIDA, hoy)).thenReturn(4L);
         when(suscripcionRepository.countByEstado(EstadoSuscripcion.CANCELADA)).thenReturn(7L);
+        when(suscripcionRepository.countByEstado(EstadoSuscripcion.CONGELADA)).thenReturn(2L);
 
         ConteoSuscripcionesDTO conteo = suscripcionService.contarPorEstado();
 
-        assertThat(conteo).isEqualTo(new ConteoSuscripcionesDTO(20L, 4L, 7L));
+        assertThat(conteo).isEqualTo(new ConteoSuscripcionesDTO(20L, 4L, 7L, 2L));
     }
 }

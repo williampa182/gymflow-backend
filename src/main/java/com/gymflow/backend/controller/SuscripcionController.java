@@ -1,5 +1,6 @@
 package com.gymflow.backend.controller;
 
+import com.gymflow.backend.dto.EnRiesgoDTO;
 import com.gymflow.backend.dto.InscripcionRequestDTO;
 import com.gymflow.backend.dto.SuscripcionRequestDTO;
 import com.gymflow.backend.dto.ConteoSuscripcionesDTO;
@@ -78,9 +79,27 @@ public class SuscripcionController {
         return ResponseEntity.ok(suscripcionService.contarPorEstado());
     }
 
+    @GetMapping("/en-riesgo")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<EnRiesgoDTO> sociosEnRiesgo() {
+        return ResponseEntity.ok(suscripcionService.sociosEnRiesgo());
+    }
+
     @PatchMapping("/{id}/cancelar")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<SuscripcionResponseDTO> cancelar(@PathVariable Long id) {
         return ResponseEntity.ok(suscripcionService.cancelar(id));
+    }
+
+    @PatchMapping("/{id}/congelar")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<SuscripcionResponseDTO> congelar(@PathVariable Long id) {
+        return ResponseEntity.ok(suscripcionService.congelar(id));
+    }
+
+    @PatchMapping("/{id}/descongelar")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<SuscripcionResponseDTO> descongelar(@PathVariable Long id) {
+        return ResponseEntity.ok(suscripcionService.descongelar(id));
     }
 }

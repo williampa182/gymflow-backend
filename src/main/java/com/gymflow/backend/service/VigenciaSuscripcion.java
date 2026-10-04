@@ -15,6 +15,7 @@ import java.time.LocalDate;
  * - morosa: VENCIDA guardada, o ACTIVA con fechaFin pasada (incluye
  *   fechaFin null como fail-closed: sin fecha no hay vigencia que alegar).
  * - CANCELADA nunca es mora aunque su fecha sea futura.
+ * - CONGELADA no es vigente ni morosa: está pausada (no entra, no vence).
  */
 public final class VigenciaSuscripcion {
 
@@ -33,5 +34,9 @@ public final class VigenciaSuscripcion {
                 && (s.getEstado() == EstadoSuscripcion.VENCIDA
                     || (s.getEstado() == EstadoSuscripcion.ACTIVA
                         && (s.getFechaFin() == null || s.getFechaFin().isBefore(hoy))));
+    }
+
+    public static boolean congelada(Suscripcion s) {
+        return s != null && s.getEstado() == EstadoSuscripcion.CONGELADA;
     }
 }

@@ -104,8 +104,14 @@ class AsistenciaServiceTest {
     }
 
     private void conSuscripcionActiva(LocalDate fechaFin, boolean planActivo) {
+        sinCongelada();
         when(suscripcionRepository.findByUsuarioIdAndEstado(1L, EstadoSuscripcion.ACTIVA))
                 .thenReturn(Optional.of(suscripcionActiva(fechaFin, planActivo)));
+    }
+
+    private void sinCongelada() {
+        when(suscripcionRepository.findByUsuarioIdAndEstado(1L, EstadoSuscripcion.CONGELADA))
+                .thenReturn(Optional.empty());
     }
 
     @Test
@@ -145,6 +151,7 @@ class AsistenciaServiceTest {
 
     @Test
     void marcarMi_sinSuscripcionActiva_lanza400() {
+        sinCongelada();
         when(suscripcionRepository.findByUsuarioIdAndEstado(1L, EstadoSuscripcion.ACTIVA))
                 .thenReturn(Optional.empty());
 
@@ -329,6 +336,7 @@ class AsistenciaServiceTest {
     @Test
     void marcarKiosk_sinPlanActivo_lanza400() {
         conKioscoYClienteValidos();
+        sinCongelada();
         when(suscripcionRepository.findByUsuarioIdAndEstado(1L, EstadoSuscripcion.ACTIVA))
                 .thenReturn(Optional.empty());
 
@@ -460,6 +468,7 @@ class AsistenciaServiceTest {
 
     @Test
     void adminMarcar_sinPlanActivo_lanza400() {
+        sinCongelada();
         when(suscripcionRepository.findByUsuarioIdAndEstado(1L, EstadoSuscripcion.ACTIVA))
                 .thenReturn(Optional.empty());
 

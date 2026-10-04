@@ -48,6 +48,9 @@ public class Suscripcion {
     @Column(name = "notificado_en")
     private LocalDateTime notificadoEn;
 
+    @Column(name = "congelada_desde")
+    private LocalDate congeladaDesde;
+
     // Optimistic locking: protege contra el caso "dos requests modifican la
     // MISMA suscripción a la vez" (ej. dos admins cancelando/editando el
     // mismo registro en simultáneo). Hibernate incrementa esta columna en

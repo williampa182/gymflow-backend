@@ -186,6 +186,12 @@ public class GlobalExceptionHandler {
         // propósito NO es "no encontrad" (ese matcher da 404): el contrato
         // del endpoint #2 de la spec dice 400 para código inválido.
         if (m.contains("código de carnet inválido")) return HttpStatus.BAD_REQUEST;
+        // Recepción: membresía congelada bloquea check-in y nueva
+        // suscripción → 409 (recurso no usable ahora), no 400 ni 500.
+        if (m.contains("congelada")) return HttpStatus.CONFLICT;
+        // Recepción: archivo de importación CSV inválido (header, vacío,
+        // exceso de filas) → 400, nunca 500.
+        if (m.contains("no se pudo importar")) return HttpStatus.BAD_REQUEST;
         return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 

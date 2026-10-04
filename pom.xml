@@ -116,6 +116,13 @@
 			<version>9.0</version>
 		</dependency>
 
+		<!-- ── CSV: importación de socios (recepción) ─────────────── -->
+		<dependency>
+			<groupId>com.opencsv</groupId>
+			<artifactId>opencsv</artifactId>
+			<version>5.9</version>
+		</dependency>
+
 		<!-- ── Testing ──────────────────────────────────────────────── -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

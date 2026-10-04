@@ -1,0 +1,7 @@
+nombre,tipoDocumento,numeroDocumento,telefono,email
+Ana Activa,CC,990001,3001112222,datacaso-activa@test.com
+Bruno Porvencer,CC,990002,3001112223,datacaso-porvencer@test.com
+Carla Vencida,CC,990003,,datacaso-vencida@test.com
+Diego Cancelado,CC,990004,3001112224,datacaso-cancelado@test.com
+Elena Congelada,CC,990005,3001112225,datacaso-congelada@test.com
+Felipe Congelado Viejo,CE,990006,,datacaso-congeladoviejo@test.com

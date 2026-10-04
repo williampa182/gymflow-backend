@@ -1,8 +1,10 @@
 package com.gymflow.backend.controller;
 
+import com.gymflow.backend.dto.EnRiesgoDTO;
 import com.gymflow.backend.dto.InscripcionRequestDTO;
 import com.gymflow.backend.dto.ConteoSuscripcionesDTO;
 import com.gymflow.backend.dto.SuscripcionResponseDTO;
+import com.gymflow.backend.model.enums.EstadoSuscripcion;
 import com.gymflow.backend.service.SuscripcionService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -75,7 +77,7 @@ class SuscripcionControllerTest {
 
     @Test
     void contarPorEstado_devuelve200_yDelegaEnElServicio() {
-        ConteoSuscripcionesDTO esperado = new ConteoSuscripcionesDTO(20L, 4L, 7L);
+        ConteoSuscripcionesDTO esperado = new ConteoSuscripcionesDTO(20L, 4L, 7L, 2L);
         when(suscripcionService.contarPorEstado()).thenReturn(esperado);
 
         ResponseEntity<ConteoSuscripcionesDTO> respuesta =
@@ -89,6 +91,72 @@ class SuscripcionControllerTest {
     @Test
     void contarPorEstado_tienePreAuthorizeSoloAdmin() throws NoSuchMethodException {
         Method method = SuscripcionController.class.getMethod("contarPorEstado");
+
+        assertThat(method.getAnnotation(PreAuthorize.class).value())
+                .isEqualTo("hasRole('ADMIN')");
+    }
+
+    @Test
+    void congelar_devuelve200_yDelegaEnElServicio() {
+        SuscripcionResponseDTO esperado = SuscripcionResponseDTO.builder()
+                .id(9L)
+                .estado(EstadoSuscripcion.CONGELADA)
+                .build();
+        when(suscripcionService.congelar(9L)).thenReturn(esperado);
+
+        ResponseEntity<SuscripcionResponseDTO> respuesta = suscripcionController.congelar(9L);
+
+        assertThat(respuesta.getStatusCode().value()).isEqualTo(200);
+        assertThat(respuesta.getBody()).isSameAs(esperado);
+        verify(suscripcionService).congelar(9L);
+    }
+
+    @Test
+    void congelar_tienePreAuthorizeSoloAdmin() throws NoSuchMethodException {
+        Method method = SuscripcionController.class.getMethod("congelar", Long.class);
+
+        assertThat(method.getAnnotation(PreAuthorize.class).value())
+                .isEqualTo("hasRole('ADMIN')");
+    }
+
+    @Test
+    void descongelar_devuelve200_yDelegaEnElServicio() {
+        SuscripcionResponseDTO esperado = SuscripcionResponseDTO.builder()
+                .id(9L)
+                .estado(EstadoSuscripcion.ACTIVA)
+                .build();
+        when(suscripcionService.descongelar(9L)).thenReturn(esperado);
+
+        ResponseEntity<SuscripcionResponseDTO> respuesta = suscripcionController.descongelar(9L);
+
+        assertThat(respuesta.getStatusCode().value()).isEqualTo(200);
+        assertThat(respuesta.getBody()).isSameAs(esperado);
+        verify(suscripcionService).descongelar(9L);
+    }
+
+    @Test
+    void descongelar_tienePreAuthorizeSoloAdmin() throws NoSuchMethodException {
+        Method method = SuscripcionController.class.getMethod("descongelar", Long.class);
+
+        assertThat(method.getAnnotation(PreAuthorize.class).value())
+                .isEqualTo("hasRole('ADMIN')");
+    }
+
+    @Test
+    void enRiesgo_devuelve200_yDelegaEnElServicio() {
+        EnRiesgoDTO esperado = new EnRiesgoDTO(List.of(), List.of());
+        when(suscripcionService.sociosEnRiesgo()).thenReturn(esperado);
+
+        ResponseEntity<EnRiesgoDTO> respuesta = suscripcionController.sociosEnRiesgo();
+
+        assertThat(respuesta.getStatusCode().value()).isEqualTo(200);
+        assertThat(respuesta.getBody()).isSameAs(esperado);
+        verify(suscripcionService).sociosEnRiesgo();
+    }
+
+    @Test
+    void enRiesgo_tienePreAuthorizeSoloAdmin() throws NoSuchMethodException {
+        Method method = SuscripcionController.class.getMethod("sociosEnRiesgo");
 
         assertThat(method.getAnnotation(PreAuthorize.class).value())
                 .isEqualTo("hasRole('ADMIN')");
