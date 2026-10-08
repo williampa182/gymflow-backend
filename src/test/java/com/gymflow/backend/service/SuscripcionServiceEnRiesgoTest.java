@@ -2,6 +2,7 @@ package com.gymflow.backend.service;
 
 import com.gymflow.backend.dto.EnRiesgoDTO;
 import com.gymflow.backend.model.Asistencia;
+import com.gymflow.backend.model.Plan;
 import com.gymflow.backend.model.Suscripcion;
 import com.gymflow.backend.model.Usuario;
 import com.gymflow.backend.model.enums.EstadoSuscripcion;
@@ -57,7 +58,9 @@ class SuscripcionServiceEnRiesgoTest {
     }
 
     private static Suscripcion suscripcion(Usuario u, LocalDate inicio, LocalDate fin) {
-        return Suscripcion.builder().usuario(u).fechaInicio(inicio).fechaFin(fin)
+        return Suscripcion.builder().usuario(u)
+                .plan(Plan.builder().id(1L).nombre("Plan Mensual").build())
+                .fechaInicio(inicio).fechaFin(fin)
                 .estado(EstadoSuscripcion.ACTIVA).build();
     }
 
@@ -171,8 +174,52 @@ class SuscripcionServiceEnRiesgoTest {
     }
 
     @Test
-    void vacio_devuelveListasVacias() {
+    void porVencer_mapeaTelefonoYNombrePlan_yOrdenaPorFechaFinAsc() {
         LocalDate hoy = LocalDate.now(clock);
+        Usuario ana = Usuario.builder().id(1L).nombre("Ana")
+                .email("u1@gymflow.test").password("hashed").telefono("300 111 22 33").build();
+        Usuario beto = Usuario.builder().id(2L).nombre("Beto")
+                .email("u2@gymflow.test").password("hashed").telefono(null).build();
+        when(suscripcionRepository.findByEstadoAndFechaFinBetween(
+                EstadoSuscripcion.ACTIVA, hoy, hoy.plusDays(7)))
+                .thenReturn(List.of(
+                        suscripcion(ana, hoy.minusDays(27), hoy.plusDays(5)),
+                        suscripcion(beto, hoy.minusDays(29), hoy.plusDays(1))));
+        when(suscripcionRepository.findByEstadoAndFechaFinGreaterThanEqual(
+                EstadoSuscripcion.ACTIVA, hoy)).thenReturn(List.of());
+
+        EnRiesgoDTO dto = suscripcionService.sociosEnRiesgo();
+
+        assertThat(dto.porVencer()).hasSize(2);
+        assertThat(dto.porVencer().get(0).nombre()).isEqualTo("Beto");
+        assertThat(dto.porVencer().get(0).telefono()).isNull();
+        assertThat(dto.porVencer().get(1).nombre()).isEqualTo("Ana");
+        assertThat(dto.porVencer().get(1).nombrePlan()).isEqualTo("Plan Mensual");
+        assertThat(dto.porVencer().get(1).telefono()).isEqualTo("300 111 22 33");
+    }
+
+    @Test
+    void inactivo_mapeaTelefono() {
+        LocalDate hoy = LocalDate.now(clock);
+        Usuario beto = Usuario.builder().id(2L).nombre("Beto")
+                .email("u2@gymflow.test").password("hashed").telefono("601 234 56 78").build();
+        Suscripcion s = suscripcion(beto, hoy.minusDays(60), hoy.plusDays(30));
+        when(suscripcionRepository.findByEstadoAndFechaFinBetween(
+                EstadoSuscripcion.ACTIVA, hoy, hoy.plusDays(7))).thenReturn(List.of());
+        when(suscripcionRepository.findByEstadoAndFechaFinGreaterThanEqual(
+                EstadoSuscripcion.ACTIVA, hoy)).thenReturn(List.of(s));
+        when(asistenciaRepository.findByUsuarioIdInAndFechaBetween(
+                List.of(2L), hoy.minusDays(15), hoy))
+                .thenReturn(List.of(asistencia(beto, hoy.minusDays(20))));
+
+        EnRiesgoDTO dto = suscripcionService.sociosEnRiesgo();
+
+        assertThat(dto.inactivos()).hasSize(1);
+        assertThat(dto.inactivos().get(0).telefono()).isEqualTo("601 234 56 78");
+    }
+
+    @Test
+    void vacio_devuelveListasVacias() {        LocalDate hoy = LocalDate.now(clock);
         when(suscripcionRepository.findByEstadoAndFechaFinBetween(
                 EstadoSuscripcion.ACTIVA, hoy, hoy.plusDays(7))).thenReturn(List.of());
         when(suscripcionRepository.findByEstadoAndFechaFinGreaterThanEqual(

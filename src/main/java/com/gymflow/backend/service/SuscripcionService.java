@@ -227,8 +227,11 @@ public class SuscripcionService {
                 .map(s -> new EnRiesgoDTO.PorVencerDTO(
                         s.getUsuario().getId(),
                         s.getUsuario().getNombre(),
+                        s.getPlan().getNombre(),
                         s.getFechaFin(),
-                        ChronoUnit.DAYS.between(hoy, s.getFechaFin())))
+                        ChronoUnit.DAYS.between(hoy, s.getFechaFin()),
+                        s.getUsuario().getTelefono()))
+                .sorted(Comparator.comparing(EnRiesgoDTO.PorVencerDTO::fechaFin))
                 .toList();
 
         List<Suscripcion> vigentes = suscripcionRepository
@@ -255,7 +258,8 @@ public class SuscripcionService {
                             ? ChronoUnit.DAYS.between(s.getFechaInicio(), hoy)
                             : ChronoUnit.DAYS.between(ultima, hoy);
                     return new EnRiesgoDTO.InactivoDTO(
-                            s.getUsuario().getId(), s.getUsuario().getNombre(), ultima, dias);
+                            s.getUsuario().getId(), s.getUsuario().getNombre(), ultima, dias,
+                            s.getUsuario().getTelefono());
                 })
                 .sorted(Comparator.comparingLong(EnRiesgoDTO.InactivoDTO::diasSinVenir).reversed())
                 .toList();

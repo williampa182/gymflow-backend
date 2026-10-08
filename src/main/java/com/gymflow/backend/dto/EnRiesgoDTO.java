@@ -4,9 +4,11 @@ import java.time.LocalDate;
 import java.util.List;
 
 public record EnRiesgoDTO(List<PorVencerDTO> porVencer, List<InactivoDTO> inactivos) {
-    public record PorVencerDTO(long usuarioId, String nombre, LocalDate fechaFin, long diasRestantes) {
+    public record PorVencerDTO(long usuarioId, String nombre, String nombrePlan, LocalDate fechaFin,
+            long diasRestantes, String telefono) {
     }
 
-    public record InactivoDTO(long usuarioId, String nombre, LocalDate ultimaAsistencia, long diasSinVenir) {
+    public record InactivoDTO(long usuarioId, String nombre, LocalDate ultimaAsistencia,
+            long diasSinVenir, String telefono) {
     }
 }
