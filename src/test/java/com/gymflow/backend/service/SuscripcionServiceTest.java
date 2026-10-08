@@ -156,6 +156,87 @@ class SuscripcionServiceTest {
         verify(suscripcionRepository).save(any(Suscripcion.class));
     }
 
+    private Plan planPaseDiario() {
+        return Plan.builder()
+                .id(9L)
+                .nombre("Pase Día")
+                .precio(new BigDecimal("15000"))
+                .duracionDias(1)
+                .tipo(TipoPlan.PASE_DIARIO)
+                .activo(true)
+                .build();
+    }
+
+    @Test
+    @SuppressWarnings("null")
+    void crear_paseDiario_fechaFinIgualAInicio() {
+        // "Solo hoy": el pase comprado hoy vence hoy mismo,
+        // no mañana como daría inicio+duración.
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+        when(planRepository.findById(9L)).thenReturn(Optional.of(planPaseDiario()));
+        when(suscripcionRepository.findByUsuarioIdAndEstado(1L, EstadoSuscripcion.ACTIVA))
+                .thenReturn(Optional.empty());
+        request.setPlanId(9L);
+        request.setFechaInicio(LocalDate.of(2026, 8, 3));
+
+        SuscripcionResponseDTO response = suscripcionService.crear(request);
+
+        assertThat(response.getEstado()).isEqualTo(EstadoSuscripcion.ACTIVA);
+        assertThat(response.getFechaFin()).isEqualTo(LocalDate.of(2026, 8, 3));
+    }
+
+    @Test
+    @SuppressWarnings("null")
+    void crear_recompraPaseDiaSiguiente_renuevaSin409() {
+        // Pase de ayer (inicio=fin=2026-08-02): hoy 08-03 ya no es vigente,
+        // así que renueva por el camino vencida-de-facto, sin 409.
+        Suscripcion paseAyer = Suscripcion.builder()
+                .id(7L)
+                .usuario(usuario)
+                .plan(planPaseDiario())
+                .fechaInicio(LocalDate.of(2026, 8, 2))
+                .fechaFin(LocalDate.of(2026, 8, 2))
+                .estado(EstadoSuscripcion.ACTIVA)
+                .build();
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+        when(planRepository.findById(9L)).thenReturn(Optional.of(planPaseDiario()));
+        when(suscripcionRepository.findByUsuarioIdAndEstado(1L, EstadoSuscripcion.ACTIVA))
+                .thenReturn(Optional.of(paseAyer));
+        request.setPlanId(9L);
+        request.setFechaInicio(LocalDate.of(2026, 8, 3));
+
+        SuscripcionResponseDTO response = suscripcionService.crear(request);
+
+        assertThat(paseAyer.getEstado()).isEqualTo(EstadoSuscripcion.VENCIDA);
+        assertThat(response.getEstado()).isEqualTo(EstadoSuscripcion.ACTIVA);
+        assertThat(response.getFechaFin()).isEqualTo(LocalDate.of(2026, 8, 3));
+    }
+
+    @Test
+    @SuppressWarnings("null")
+    void crear_paseMismoDia_409() {
+        // Pase de hoy (inicio=fin=hoy 2026-08-03): vigente → 409, ya tiene
+        // su pase de hoy.
+        Suscripcion paseHoy = Suscripcion.builder()
+                .id(8L)
+                .usuario(usuario)
+                .plan(planPaseDiario())
+                .fechaInicio(LocalDate.of(2026, 8, 3))
+                .fechaFin(LocalDate.of(2026, 8, 3))
+                .estado(EstadoSuscripcion.ACTIVA)
+                .build();
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+        when(planRepository.findById(9L)).thenReturn(Optional.of(planPaseDiario()));
+        when(suscripcionRepository.findByUsuarioIdAndEstado(1L, EstadoSuscripcion.ACTIVA))
+                .thenReturn(Optional.of(paseHoy));
+        request.setPlanId(9L);
+        request.setFechaInicio(LocalDate.of(2026, 8, 3));
+
+        assertThatThrownBy(() -> suscripcionService.crear(request))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("ya tiene una suscripción activa");
+    }
+
     @Test
     @SuppressWarnings("null")
     void cancelar_exitoso() {

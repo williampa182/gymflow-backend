@@ -137,6 +137,31 @@ class NotificacionVencimientoServiceTest {
     }
 
     @Test
+    void procesarVencimientos_paseDiario_seOmiteSinEnviarNiMarcar() {
+        Usuario usuario = usuarioActivo("visitante@gymflow.com");
+        Plan pase = Plan.builder()
+                .id(9L)
+                .nombre("Pase Día")
+                .precio(new BigDecimal("15000"))
+                .duracionDias(1)
+                .tipo(TipoPlan.PASE_DIARIO)
+                .activo(true)
+                .build();
+        Suscripcion suscripcion = activaPorVencer(1L, usuario, pase);
+
+        when(suscripcionRepository.findPendientesAvisoVencimiento(
+                eq(EstadoSuscripcion.ACTIVA), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(suscripcion));
+
+        int enviadas = notificacionVencimientoService.procesarVencimientos();
+
+        assertThat(enviadas).isZero();
+        assertThat(suscripcion.getNotificadoEn()).isNull();
+        verify(emailClient, never()).enviar(any(EmailPayload.class));
+        verify(suscripcionRepository, never()).save(suscripcion);
+    }
+
+    @Test
     void procesarVencimientos_sustituyeElPlaceholderDeLaCtaEnHtmlYTexto() {
         Usuario usuario = usuarioActivo("cliente@gymflow.com");
         Plan plan = planMensual();

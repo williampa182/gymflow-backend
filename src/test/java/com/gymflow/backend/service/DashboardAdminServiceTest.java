@@ -78,7 +78,8 @@ class DashboardAdminServiceTest {
 
         assertThat(resultado.ingresosPorTipoPlan())
                 .extracting("tipoPlan")
-                .containsExactly(TipoPlan.MENSUAL, TipoPlan.TRIMESTRAL, TipoPlan.SEMESTRAL, TipoPlan.ANUAL);
+                .containsExactly(TipoPlan.MENSUAL, TipoPlan.TRIMESTRAL, TipoPlan.SEMESTRAL, TipoPlan.ANUAL,
+                        TipoPlan.PASE_DIARIO);
         assertThat(resultado.ingresosPorTipoPlan().get(0).ingresoEstimado())
                 .isEqualByComparingTo("50000.00");
         assertThat(resultado.ingresosPorTipoPlan().get(1).ingresoEstimado())

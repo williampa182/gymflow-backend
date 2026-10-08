@@ -6,6 +6,7 @@ import com.gymflow.backend.model.Suscripcion;
 import com.gymflow.backend.model.Usuario;
 import com.gymflow.backend.model.enums.EstadoSuscripcion;
 import com.gymflow.backend.model.enums.Rol;
+import com.gymflow.backend.model.enums.TipoPlan;
 import com.gymflow.backend.repository.PlanRepository;
 import com.gymflow.backend.repository.AsistenciaRepository;
 import com.gymflow.backend.repository.SuscripcionRepository;
@@ -130,5 +131,25 @@ class SuscripcionServiceCongelarTest {
         SuscripcionResponseDTO respuesta = suscripcionService.cancelar(9L);
 
         assertThat(respuesta.getEstado()).isEqualTo(EstadoSuscripcion.CANCELADA);
+    }
+
+    @Test
+    void congelar_paseDiario_bloqueadoConMensajePropio() {
+        Plan pase = Plan.builder().id(9L).nombre("Pase Día")
+                .duracionDias(1).tipo(TipoPlan.PASE_DIARIO).build();
+        Suscripcion paseHoy = Suscripcion.builder()
+                .id(10L)
+                .usuario(usuario)
+                .plan(pase)
+                .fechaInicio(LocalDate.now(clock))
+                .fechaFin(LocalDate.now(clock))
+                .estado(EstadoSuscripcion.ACTIVA)
+                .build();
+        when(suscripcionRepository.findById(10L)).thenReturn(Optional.of(paseHoy));
+
+        assertThatThrownBy(() -> suscripcionService.congelar(10L))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("no se pueden congelar");
+        verify(suscripcionRepository, never()).save(any());
     }
 }

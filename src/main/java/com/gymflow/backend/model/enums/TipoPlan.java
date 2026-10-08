@@ -4,5 +4,6 @@ public enum TipoPlan {
     MENSUAL,
     TRIMESTRAL,
     SEMESTRAL,
-    ANUAL
+    ANUAL,
+    PASE_DIARIO
 }

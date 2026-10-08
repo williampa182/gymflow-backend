@@ -70,7 +70,10 @@ public class Suscripcion {
     @PrePersist
     protected void onCreate() {
         creadoEn = LocalDateTime.now();
-        if (fechaInicio != null && plan != null) {
+        // Solo rellena cuando el service no fijó fechaFin explícita
+        // (pase diario: fechaFin = inicio, "solo hoy"). Antes sobrescribía
+        // siempre con inicio+duración, lo que impedía excepciones por tipo.
+        if (fechaFin == null && fechaInicio != null && plan != null) {
             fechaFin = fechaInicio.plusDays(plan.getDuracionDias());
         }
     }

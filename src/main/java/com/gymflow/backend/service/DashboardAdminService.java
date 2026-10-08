@@ -91,7 +91,8 @@ public class DashboardAdminService {
         suscripcionRepository.ingresosEstimadosPorTipoPlan(EstadoSuscripcion.ACTIVA, hoy)
                 .forEach(row -> ingresos.put(row.getTipoPlan(), row));
 
-        return List.of(TipoPlan.MENSUAL, TipoPlan.TRIMESTRAL, TipoPlan.SEMESTRAL, TipoPlan.ANUAL)
+        return List.of(TipoPlan.MENSUAL, TipoPlan.TRIMESTRAL, TipoPlan.SEMESTRAL, TipoPlan.ANUAL,
+                        TipoPlan.PASE_DIARIO)
                 .stream()
                 .map(tipoPlan -> {
                     IngresoPorTipoPlanProjection row = ingresos.get(tipoPlan);

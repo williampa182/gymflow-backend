@@ -6,6 +6,7 @@ import com.gymflow.backend.model.Plan;
 import com.gymflow.backend.model.Suscripcion;
 import com.gymflow.backend.model.Usuario;
 import com.gymflow.backend.model.enums.EstadoSuscripcion;
+import com.gymflow.backend.model.enums.TipoPlan;
 import com.gymflow.backend.repository.AsistenciaRepository;
 import com.gymflow.backend.repository.PlanRepository;
 import com.gymflow.backend.repository.SuscripcionRepository;
@@ -219,7 +220,29 @@ class SuscripcionServiceEnRiesgoTest {
     }
 
     @Test
-    void vacio_devuelveListasVacias() {        LocalDate hoy = LocalDate.now(clock);
+    void paseDiario_quedaFueraDeAmbasListas() {
+        LocalDate hoy = LocalDate.now(clock);
+        Usuario visi = usuario(9L, "Visitante");
+        Suscripcion pase = Suscripcion.builder().usuario(visi)
+                .plan(Plan.builder().id(9L).nombre("Pase Día").duracionDias(1)
+                        .tipo(TipoPlan.PASE_DIARIO).build())
+                .fechaInicio(hoy).fechaFin(hoy)
+                .estado(EstadoSuscripcion.ACTIVA).build();
+        when(suscripcionRepository.findByEstadoAndFechaFinBetween(
+                EstadoSuscripcion.ACTIVA, hoy, hoy.plusDays(7))).thenReturn(List.of(pase));
+        when(suscripcionRepository.findByEstadoAndFechaFinGreaterThanEqual(
+                EstadoSuscripcion.ACTIVA, hoy)).thenReturn(List.of(pase));
+
+        EnRiesgoDTO dto = suscripcionService.sociosEnRiesgo();
+
+        assertThat(dto.porVencer()).isEmpty();
+        assertThat(dto.inactivos()).isEmpty();
+        verifyNoInteractions(asistenciaRepository);
+    }
+
+    @Test
+    void vacio_devuelveListasVacias() {
+        LocalDate hoy = LocalDate.now(clock);
         when(suscripcionRepository.findByEstadoAndFechaFinBetween(
                 EstadoSuscripcion.ACTIVA, hoy, hoy.plusDays(7))).thenReturn(List.of());
         when(suscripcionRepository.findByEstadoAndFechaFinGreaterThanEqual(

@@ -9,6 +9,7 @@ import com.gymflow.backend.model.Plan;
 import com.gymflow.backend.model.Suscripcion;
 import com.gymflow.backend.model.Usuario;
 import com.gymflow.backend.model.enums.EstadoSuscripcion;
+import com.gymflow.backend.model.enums.TipoPlan;
 import com.gymflow.backend.repository.AsistenciaRepository;
 import com.gymflow.backend.repository.PlanRepository;
 import com.gymflow.backend.repository.AsistenciaRepository;
@@ -52,6 +53,10 @@ public class SuscripcionService {
         // vencida de facto (ACTIVA con fecha pasada), se transiciona a
         // VENCIDA en esta misma transacción y la nueva nace ACTIVA
         // (renovación sin cancelación manual).
+        // Pase diario ("solo hoy": fechaFin = inicio): el de ayer ya no es
+        // vigente hoy, así que la recompra del día siguiente renueva por
+        // este mismo camino sin 409. El mismo día sí bloquea con 409
+        // (ya tiene su pase de hoy).
         LocalDate hoy = LocalDate.now(clock);
         suscripcionRepository.findByUsuarioIdAndEstado(usuario.getId(), EstadoSuscripcion.ACTIVA)
                 .ifPresent(vieja -> {
@@ -78,7 +83,7 @@ public class SuscripcionService {
                 .usuario(usuario)
                 .plan(plan)
                 .fechaInicio(request.getFechaInicio())
-                .fechaFin(request.getFechaInicio().plusDays(plan.getDuracionDias()))
+                .fechaFin(calcularFechaFin(request.getFechaInicio(), plan))
                 .estado(EstadoSuscripcion.ACTIVA)
                 .build();
 
@@ -152,7 +157,7 @@ public class SuscripcionService {
                 .usuario(usuario)
                 .plan(plan)
                 .fechaInicio(inicio)
-                .fechaFin(inicio.plusDays(plan.getDuracionDias()))
+                .fechaFin(calcularFechaFin(inicio, plan))
                 .estado(EstadoSuscripcion.ACTIVA)
                 .build();
 
@@ -224,6 +229,10 @@ public class SuscripcionService {
         List<EnRiesgoDTO.PorVencerDTO> porVencer = suscripcionRepository
                 .findByEstadoAndFechaFinBetween(EstadoSuscripcion.ACTIVA, hoy, hoy.plusDays(7))
                 .stream()
+                // Pases diarios fuera del panel (misma decisión que el email:
+                // el visitante paga en caja, no hay qué cobrarle después).
+                .filter(s -> s.getPlan() == null
+                        || s.getPlan().getTipo() != TipoPlan.PASE_DIARIO)
                 .map(s -> new EnRiesgoDTO.PorVencerDTO(
                         s.getUsuario().getId(),
                         s.getUsuario().getNombre(),
@@ -236,7 +245,10 @@ public class SuscripcionService {
 
         List<Suscripcion> vigentes = suscripcionRepository
                 .findByEstadoAndFechaFinGreaterThanEqual(EstadoSuscripcion.ACTIVA, hoy)
-                .stream().limit(500).toList();
+                .stream()
+                .filter(s -> s.getPlan() == null
+                        || s.getPlan().getTipo() != TipoPlan.PASE_DIARIO)
+                .limit(500).toList();
         LocalDate desde = hoy.minusDays(15);
         Map<Long, LocalDate> ultimaPorUsuario = new HashMap<>();
         if (!vigentes.isEmpty() && asistenciaRepository != null) {
@@ -264,6 +276,16 @@ public class SuscripcionService {
                 .sorted(Comparator.comparingLong(EnRiesgoDTO.InactivoDTO::diasSinVenir).reversed())
                 .toList();
         return new EnRiesgoDTO(porVencer, inactivos);
+    }
+
+    // Pase diario = "solo hoy": fechaFin es el mismo día de inicio (NO
+    // inicio+duración). El @PrePersist solo rellena cuando fechaFin es null,
+    // así que este valor explícito sobrevive al persist.
+    private static LocalDate calcularFechaFin(LocalDate inicio, Plan plan) {
+        if (plan.getTipo() == TipoPlan.PASE_DIARIO) {
+            return inicio;
+        }
+        return inicio.plusDays(plan.getDuracionDias());
     }
 
     @SuppressWarnings("null")
@@ -294,6 +316,10 @@ public class SuscripcionService {
                 .orElseThrow(() -> new RuntimeException("Suscripción no encontrada con id: " + id));
 
         LocalDate hoy = LocalDate.now(clock);
+        if (suscripcion.getPlan() != null
+                && suscripcion.getPlan().getTipo() == TipoPlan.PASE_DIARIO) {
+            throw new RuntimeException("Los pases diarios no se pueden congelar: valen solo el día de compra");
+        }
         if (!VigenciaSuscripcion.vigente(suscripcion, hoy)) {
             throw new RuntimeException("Solo se pueden congelar suscripciones activas y vigentes");
         }

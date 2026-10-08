@@ -6,6 +6,7 @@ import com.gymflow.backend.model.Plan;
 import com.gymflow.backend.model.Suscripcion;
 import com.gymflow.backend.model.Usuario;
 import com.gymflow.backend.model.enums.EstadoSuscripcion;
+import com.gymflow.backend.model.enums.TipoPlan;
 import com.gymflow.backend.repository.SuscripcionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -84,6 +85,13 @@ public class NotificacionVencimientoService {
         for (Suscripcion suscripcion : pendientes) {
             Usuario usuario = suscripcion.getUsuario();
             if (usuario.getEmail() == null || usuario.getEmail().isBlank()) {
+                continue;
+            }
+            // Pases diarios fuera del email automático (decisión de producto
+            // 2026-10-08, reversible): avisar "por vencer" a quien compró
+            // un pase de un día es ruido, no retención.
+            if (suscripcion.getPlan() != null
+                    && suscripcion.getPlan().getTipo() == TipoPlan.PASE_DIARIO) {
                 continue;
             }
             try {
