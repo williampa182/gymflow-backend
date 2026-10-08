@@ -58,7 +58,7 @@ public class UsuarioService {
                 .findByTipoDocumentoAndNumeroDocumento(tipoNormalizado, numeroNormalizado)
                 .map(this::toDTO)
                 .orElseThrow(() -> new RuntimeException(
-                        "No se encontró ningún socio con ese documento"));
+                        "Socio no encontrado con ese documento"));
     }
 
     public Page<UsuarioResponseDTO> listarUsuarios(Rol rol, String textoBusqueda, Pageable pageable) {        // D1-B: con texto se busca (paginado); sin texto, comportamiento

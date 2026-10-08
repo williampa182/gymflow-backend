@@ -46,4 +46,18 @@ class GlobalExceptionHandlerTest {
                 new RuntimeException("La membresía está congelada: descongélala para registrar entradas"));
         assertThat(respuesta.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     }
+
+    @Test
+    void congelarPaseDiario_mapeaA400() {
+        ResponseEntity<Map<String, Object>> respuesta = handler.handleGenericRuntime(
+                new RuntimeException("Los pases diarios no se pueden congelar: valen solo el día de compra"));
+        assertThat(respuesta.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void socioNoEncontrado_mapeaA404() {
+        ResponseEntity<Map<String, Object>> respuesta = handler.handleGenericRuntime(
+                new RuntimeException("Socio no encontrado con ese documento"));
+        assertThat(respuesta.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
 }

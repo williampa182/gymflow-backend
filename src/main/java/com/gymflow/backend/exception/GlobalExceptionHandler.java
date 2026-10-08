@@ -189,6 +189,9 @@ public class GlobalExceptionHandler {
         // Recepción: membresía congelada bloquea check-in y nueva
         // suscripción → 409 (recurso no usable ahora), no 400 ni 500.
         if (m.contains("congelada")) return HttpStatus.CONFLICT;
+        // Recepción: congelar un pase diario → 400 con motivo (el mensaje
+        // contiene "no se pueden congelar"; sin este match caía en 500).
+        if (m.contains("no se pueden congelar")) return HttpStatus.BAD_REQUEST;
         // Recepción: archivo de importación CSV inválido (header, vacío,
         // exceso de filas) → 400, nunca 500.
         if (m.contains("no se pudo importar")) return HttpStatus.BAD_REQUEST;

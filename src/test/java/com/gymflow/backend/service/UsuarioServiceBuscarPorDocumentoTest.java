@@ -75,6 +75,6 @@ class UsuarioServiceBuscarPorDocumentoTest {
 
         assertThatThrownBy(() -> usuarioService.buscarPorDocumento("CC", "999"))
                 .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("No se encontró");
+                .hasMessageContaining("no encontrado");
     }
 }
