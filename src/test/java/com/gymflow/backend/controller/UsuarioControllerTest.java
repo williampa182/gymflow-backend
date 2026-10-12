@@ -5,6 +5,7 @@ import com.gymflow.backend.dto.ResultadoImportacionDTO;
 import com.gymflow.backend.dto.UsuarioResponseDTO;
 import com.gymflow.backend.dto.request.CambioRolRequest;
 import com.gymflow.backend.dto.request.CrearClienteRequest;
+import com.gymflow.backend.dto.request.ActualizarContactoRequest;
 import com.gymflow.backend.service.UsuarioService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -205,6 +206,36 @@ class UsuarioControllerTest {
     void porDocumento_tienePreAuthorizeSoloAdmin() throws NoSuchMethodException {
         Method method = UsuarioController.class.getMethod(
                 "porDocumento", String.class, String.class);
+
+        assertThat(method.getAnnotation(PreAuthorize.class).value())
+                .isEqualTo("hasRole('ADMIN')");
+    }
+
+    @Test
+    void actualizarContacto_devuelve200_yDelegaEnElServicio() {
+        ActualizarContactoRequest request = new ActualizarContactoRequest();
+        request.setEmail("nuevo@gymflow.com");
+        request.setTelefono("3009998877");
+        UsuarioResponseDTO esperado = UsuarioResponseDTO.builder()
+                .id(5L)
+                .email("nuevo@gymflow.com")
+                .telefono("3009998877")
+                .build();
+        when(usuarioService.actualizarContacto(5L, "nuevo@gymflow.com", "3009998877"))
+                .thenReturn(esperado);
+
+        ResponseEntity<UsuarioResponseDTO> respuesta =
+                usuarioController.actualizarContacto(5L, request);
+
+        assertThat(respuesta.getStatusCode().value()).isEqualTo(200);
+        assertThat(respuesta.getBody()).isSameAs(esperado);
+        verify(usuarioService).actualizarContacto(5L, "nuevo@gymflow.com", "3009998877");
+    }
+
+    @Test
+    void actualizarContacto_tienePreAuthorizeSoloAdmin() throws NoSuchMethodException {
+        Method method = UsuarioController.class.getMethod(
+                "actualizarContacto", Long.class, ActualizarContactoRequest.class);
 
         assertThat(method.getAnnotation(PreAuthorize.class).value())
                 .isEqualTo("hasRole('ADMIN')");

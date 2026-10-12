@@ -11,6 +11,7 @@ import com.gymflow.backend.service.NotificacionVencimientoService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +49,9 @@ class SuscripcionPendientesAvisoRepositoryTest {
     @Autowired
     private PlanRepository planRepository;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     @MockitoBean
     private EmailClient emailClient;
 
@@ -63,6 +67,12 @@ class SuscripcionPendientesAvisoRepositoryTest {
         // que la DB esté vacía.
         int baselinePendientes = suscripcionRepository.findPendientesAvisoVencimiento(
                 EstadoSuscripcion.ACTIVA, hoy, hoy.plusDays(7)).size();
+        // La misma BD dev recibe corridas manuales/E2E (pases, socios sin
+        // email) que la query cuenta pero el servicio omite por regla
+        // (PASE_DIARIO fuera del email; sin email no hay a quién escribir).
+        // Esas reglas están fijadas por unit tests; acá se descuenta el
+        // residuo con SQL independiente para no romper el conteo exacto.
+        int residuoOmitido = residuoOmisible(hoy);
 
         Suscripcion activaEnVentanaSinNotificar = crearSuscripcion(
                 crearUsuario("aviso-recibe@gymflow.com", true), plan,
@@ -85,7 +95,7 @@ class SuscripcionPendientesAvisoRepositoryTest {
 
         int enviadas = notificacionVencimientoService.procesarVencimientos();
 
-        assertThat(enviadas).isEqualTo(baselinePendientes + 2);
+        assertThat(enviadas).isEqualTo(baselinePendientes - residuoOmitido + 2);
         assertThat(activaEnVentanaSinNotificar.getNotificadoEn()).isNotNull();
         assertThat(activaBordeHoy.getNotificadoEn()).isNotNull();
         assertThat(activaEnVentanaYaNotificada.getNotificadoEn())
@@ -94,6 +104,19 @@ class SuscripcionPendientesAvisoRepositoryTest {
         assertThat(activaFueraDeVentana.getNotificadoEn()).isNull();
         assertThat(canceladaEnVentana.getNotificadoEn()).isNull();
         assertThat(activaConUsuarioInactivo.getNotificadoEn()).isNull();
+    }
+
+    private Integer residuoOmisible(LocalDate hoy) {
+        Integer n = jdbcTemplate.queryForObject(
+                "select count(*) from suscripciones s " +
+                        "join usuarios u on u.id = s.usuario_id " +
+                        "join planes p on p.id = s.plan_id " +
+                        "where s.estado = 'ACTIVA' " +
+                        "and s.fecha_fin between ? and ? " +
+                        "and s.notificado_en is null " +
+                        "and (p.tipo = 'PASE_DIARIO' or u.email is null)",
+                Integer.class, hoy, hoy.plusDays(7));
+        return n == null ? 0 : n;
     }
 
     private Usuario crearUsuario(String email, boolean activo) {

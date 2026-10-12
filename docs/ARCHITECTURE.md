@@ -439,8 +439,9 @@ Postgres/Redis estén arriba, falla el arranque.
 **Nota de versiones**: dev, CI y prod corren todos Postgres 18 (alineado
 2026-08-04; el backup de CI usa el cliente 18, ver §2.8).
 
-**Usuarios de prueba** (sembrados en dev):
-- `william@gymflow.com` / `admin1234` (ADMIN, id 1)
+**Usuarios de prueba** (sembrados en dev por `scripts/demo-d0/run-D0.ps1`;
+credenciales de ejemplo, nunca reusar en producción):
+- `dueno@gymflow.demo` (ADMIN)
 - `cliente@gymflow.com` / `cliente1234` (CLIENTE)
 
 ---

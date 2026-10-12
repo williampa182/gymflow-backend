@@ -54,7 +54,12 @@ public class AuthService {
 
     @SuppressWarnings("null")
     public AuthResponse registrar(RegisterRequest request) {
-        if (usuarioRepository.existsByEmail(request.getEmail())) {
+        // Email siempre en minúsculas (hallazgo caos-2026-10-08: sin esto,
+        // "Ana@x.com" y "ana@x.com" creaban dos cuentas porque existsByEmail
+        // y el UNIQUE de Postgres son case-sensitive). No revela nada nuevo
+        // (Fix A/B intactos: el mensaje de duplicado sigue genérico).
+        String email = request.getEmail() == null ? null : request.getEmail().trim().toLowerCase();
+        if (email != null && usuarioRepository.existsByEmail(email)) {
             if (revealEmailExists) {
                 throw new RuntimeException("Ya existe un usuario con ese email");
             } else {
@@ -92,7 +97,7 @@ public class AuthService {
 
         Usuario usuario = Usuario.builder()
                 .nombre(request.getNombre())
-                .email(request.getEmail())
+                .email(email)
                 .password(passwordEncoder.encode(request.getPassword()))
                 .rol(rol)
                 .codigoCarnet(codigoCarnet)
@@ -121,6 +126,11 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
+        // Misma normalización que registrar: el usuario puede tipear su
+        // email con mayúsculas y debe entrar igual a su cuenta única.
+        String emailIngreso = request.getEmail() == null
+                ? null
+                : request.getEmail().trim().toLowerCase();
         // Fix C (user-enumeration-3.1.md): antes había un findByEmail()
         // .orElseThrow() acá abajo que era dead code (el authManager ya
         // validó que el usuario existe y la contraseña es correcta arriba),
@@ -132,7 +142,7 @@ public class AuthService {
         // como IllegalStateException, no como RuntimeException genérica.
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
-                        request.getEmail(),
+                        emailIngreso,
                         request.getPassword()
                 )
         );

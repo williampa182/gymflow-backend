@@ -29,14 +29,17 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     /**
      * D1-B: búsqueda por texto para selectores con más de una página de
      * usuarios (el modal de suscripciones pedía /usuarios sin size y solo
-     * veía los primeros 20). ILIKE sobre nombre/email; el llamador escapa
-     * \, % y _ y la query declara ESCAPE para que se busquen literales.
+     * veía los primeros 20). ILIKE sobre nombre/email/documento; el llamador
+     * escapa \, % y _ y la query declara ESCAPE para que se busquen
+     * literales. El documento entra porque la recepcionista suele conocer
+     * el CC pero no el email (hallazgo E2E 2026-10-12).
      */
     @Query("""
             select u from Usuario u
             where (:rol is null or u.rol = :rol)
               and (lower(u.nombre) like lower(concat('%', :q, '%')) escape '\\'
-                or lower(u.email) like lower(concat('%', :q, '%')) escape '\\')
+                or lower(u.email) like lower(concat('%', :q, '%')) escape '\\'
+                or lower(u.numeroDocumento) like lower(concat('%', :q, '%')) escape '\\')
             """)
     Page<Usuario> buscarPorTexto(
             @Param("rol") Rol rol,

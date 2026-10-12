@@ -99,6 +99,36 @@ class UsuarioServiceCrearClienteTest {
     }
 
     @Test
+    void emailConMayusculas_seGuardaEnMinusculas() {
+        CrearClienteRequest request = pedido("CC", "123456");
+        request.setEmail("Socio@GymFlow.com");
+        when(usuarioRepository.existsByEmail("socio@gymflow.com")).thenReturn(false);
+        when(usuarioRepository.existsByTipoDocumentoAndNumeroDocumento("CC", "123456"))
+                .thenReturn(false);
+        when(codigoCarnetGenerator.generarUnico(any())).thenReturn("ABC123");
+        when(passwordEncoder.encode(any())).thenReturn("hash");
+
+        UsuarioResponseDTO respuesta = usuarioService.crearCliente(request);
+
+        assertThat(respuesta.getEmail()).isEqualTo("socio@gymflow.com");
+        ArgumentCaptor<Usuario> captor = ArgumentCaptor.forClass(Usuario.class);
+        verify(usuarioRepository).save(captor.capture());
+        assertThat(captor.getValue().getEmail()).isEqualTo("socio@gymflow.com");
+    }
+
+    @Test
+    void emailDuplicadoConDistintaCaja_lanzaConflicto() {
+        CrearClienteRequest request = pedido("CC", "123456");
+        request.setEmail("SOCIO@gymflow.com");
+        when(usuarioRepository.existsByEmail("socio@gymflow.com")).thenReturn(true);
+
+        assertThatThrownBy(() -> usuarioService.crearCliente(request))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Ya existe");
+        verify(usuarioRepository, never()).save(any());
+    }
+
+    @Test
     void emailDuplicado_lanzaConflicto() {
         when(usuarioRepository.existsByEmail("socio@gymflow.com")).thenReturn(true);
 

@@ -272,8 +272,26 @@ public class UsuarioService {
         }
     }
 
+    @SuppressWarnings("null")
+    @Transactional
+    public UsuarioResponseDTO actualizarContacto(Long id, String email, String telefono) {
+        Usuario usuario = usuarioRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con id: " + id));
+
+        String emailNormalizado = normalizarEmail(email);
+        if (emailNormalizado != null
+                && !emailNormalizado.equalsIgnoreCase(usuario.getEmail() == null ? "" : usuario.getEmail())
+                && usuarioRepository.existsByEmail(emailNormalizado)) {
+            throw new RuntimeException("Ya existe un usuario con ese email");
+        }
+        usuario.setEmail(emailNormalizado);
+        usuario.setTelefono(telefono == null || telefono.isBlank() ? null : telefono.trim());
+        usuarioRepository.save(usuario);
+        return toDTO(usuario);
+    }
+
     private static String normalizarEmail(String email) {
-        return email == null || email.isBlank() ? null : email.trim();
+        return email == null || email.isBlank() ? null : email.trim().toLowerCase();
     }
 
     private static String generarPasswordAleatoria() {

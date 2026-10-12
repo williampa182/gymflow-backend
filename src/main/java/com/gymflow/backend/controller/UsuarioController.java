@@ -1,6 +1,7 @@
 package com.gymflow.backend.controller;
 
 import com.gymflow.backend.dto.CarnetResponseDTO;
+import com.gymflow.backend.dto.request.ActualizarContactoRequest;
 import com.gymflow.backend.dto.request.CambioRolRequest;
 import com.gymflow.backend.dto.request.CrearClienteRequest;
 import com.gymflow.backend.dto.ResultadoImportacionDTO;
@@ -85,6 +86,15 @@ public class UsuarioController {
             @PathVariable Long id,
             @Valid @RequestBody CambioRolRequest request) {
         return ResponseEntity.ok(usuarioService.cambiarRol(id, request.getRol()));
+    }
+
+    @PatchMapping("/{id}/contacto")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<UsuarioResponseDTO> actualizarContacto(
+            @PathVariable Long id,
+            @Valid @RequestBody ActualizarContactoRequest request) {
+        return ResponseEntity.ok(usuarioService.actualizarContacto(
+                id, request.getEmail(), request.getTelefono()));
     }
 
     @PatchMapping("/{id}/estado")

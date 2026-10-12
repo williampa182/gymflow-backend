@@ -324,6 +324,44 @@ class AuthServiceTest {
         assertThat(response.getEmail()).isEqualTo(EMAIL);
     }
 
+    @Test
+    void registrar_emailConMayusculas_guardaEnMinusculas() {
+        RegisterRequest request = registerRequest();
+        request.setEmail("Cliente@GymFlow.com");
+        when(usuarioRepository.existsByEmail("cliente@gymflow.com")).thenReturn(false);
+        when(usuarioRepository.countByRolAndActivo(Rol.ADMIN, true)).thenReturn(1L);
+        when(passwordEncoder.encode(RAW_PASSWORD)).thenReturn(CURRENT_COST_HASH);
+        when(jwtUtil.generarToken(any(Usuario.class))).thenReturn("jwt-generado");
+        stubGeneracionDeCarnet();
+
+        AuthResponse response = authService.registrar(request);
+
+        ArgumentCaptor<Usuario> usuarioCaptor = ArgumentCaptor.forClass(Usuario.class);
+        verify(usuarioRepository).save(usuarioCaptor.capture());
+        assertThat(usuarioCaptor.getValue().getEmail()).isEqualTo(EMAIL);
+        assertThat(response.getEmail()).isEqualTo(EMAIL);
+    }
+
+    @Test
+    void login_emailConMayusculas_autenticaNormalizado() {
+        LoginRequest request = loginRequest();
+        request.setEmail("CLIENTE@GYMFLOW.COM");
+        Authentication authentication = mock(Authentication.class);
+        Usuario usuario = usuario(CURRENT_COST_HASH);
+        when(authenticationManager.authenticate(any(Authentication.class))).thenReturn(authentication);
+        when(authentication.getName()).thenReturn(EMAIL);
+        when(usuarioRepository.findByEmail(EMAIL)).thenReturn(Optional.of(usuario));
+        when(jwtUtil.generarToken(usuario)).thenReturn("jwt-generado");
+
+        authService.login(request);
+
+        ArgumentCaptor<Authentication> authenticationCaptor = ArgumentCaptor.forClass(Authentication.class);
+        verify(authenticationManager).authenticate(authenticationCaptor.capture());
+        UsernamePasswordAuthenticationToken authRequest =
+                (UsernamePasswordAuthenticationToken) authenticationCaptor.getValue();
+        assertThat(authRequest.getPrincipal()).isEqualTo(EMAIL);
+    }
+
     private RegisterRequest registerRequest() {
         RegisterRequest request = new RegisterRequest();
         request.setNombre("Cliente GymFlow");
